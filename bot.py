@@ -34,7 +34,7 @@ WELCOME_TEXT = (
     "┃  📌 <b>What this bot does:</b>\n"
     "┃  • Auto-join groups/channels\n"
     "┃  • Automatically approve join requests\n"
-    "┃  • 100% Safe & Secure (No OTP required)\n"
+    "┃  • 100% Safe & Secure\n"
     "┃\n"
     "┃  ⚡ <b>Quick Start:</b>\n"
     "┃  Just add me to your Group or Channel\n"
@@ -60,37 +60,39 @@ async def cmd_start(msg: types.Message):
     
     await msg.answer(WELCOME_TEXT, reply_markup=kb)
 
-# 👇 UPDATED: Ab ye sirf Request Approve karega, Welcome msg nahi bhejega
+# 👇 REQUEST APPROVE HANDLER (Silent - No Welcome MSG)
 @dp.chat_join_request()
 async def auto_approve_join_request(update: types.ChatJoinRequest):
     """Safely auto-approve join requests silently"""
     user_id = update.from_user.id
-    
-    # SEEDHA REQUEST APPROVE KARO BINA MSG BHEJE
     try:
         await update.approve()
         logging.info(f"Silently approved user {user_id} in chat {update.chat.id}")
     except Exception as e:
         logging.error(f"Failed to approve user: {e}")
 
-# 👇 LEFT MESSAGE (DM me jayega jab koi channel chhode)
+# 👇 LEFT MESSAGE HANDLER (Naya msg update ke sath)
 @dp.chat_member()
 async def on_chat_member_update(update: types.ChatMemberUpdated):
     user = update.from_user
-    chat_title = update.chat.title
 
     # Agar koi LEFT karta hai (ya remove kiya jata hai)
     if update.old_chat_member.status in ['member', 'administrator'] and update.new_chat_member.status in ['left', 'kicked']:
-        goodbye_msg = f"😢 <b>🌟ALL DRAMA DIRECT FILES AVAILABLE🗃️!</b>\n\https://t.me/+amS1Q3R4_Qg5NjU1
-https://t.me/+amS1Q3R4_Qg5NjU1"
+        
+        # Aapka naya Left message
+        goodbye_msg = (
+            "🌟 ALL DRAMA DIRECT FILES AVAILABLE 🗃️\n\n"
+            "https://t.me/+amS1Q3R4_Qg5NjU1\n"
+            "https://t.me/+amS1Q3R4_Qg5NjU1"
+        )
+        
         try:
             await bot.send_message(chat_id=user.id, text=goodbye_msg)
             logging.info(f"Goodbye DM sent to {user.id}")
         except Exception as e:
             logging.warning(f"Goodbye DM nahi bhej paye (User ne bot block kiya hoga): {e}")
 
-
-# DUMMY WEB SERVER (Render ke liye)
+# 👇 DUMMY WEB SERVER (Render ke liye)
 async def handle_ping(request):
     return web.Response(text="Bot is running beautifully! 🚀")
 
