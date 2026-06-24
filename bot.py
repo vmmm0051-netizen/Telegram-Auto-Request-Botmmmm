@@ -81,7 +81,7 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
 
     # Agar koi LEFT karta hai (ya remove kiya jata hai)
     if update.old_chat_member.status in ['member', 'administrator'] and update.new_chat_member.status in ['left', 'kicked']:
-        goodbye_msg = f"😢 <b>🌟 ALL DRAMA DIRECT FILES AVAILABLE 🗃️!</b>\n\nhttps://t.me/+amS1Q3R4_Qg5NjU1
+        goodbye_msg = f"😢 <b>🌟ALL DRAMA DIRECT FILES AVAILABLE🗃️!</b>\n\https://t.me/+amS1Q3R4_Qg5NjU1
 https://t.me/+amS1Q3R4_Qg5NjU1"
         try:
             await bot.send_message(chat_id=user.id, text=goodbye_msg)
