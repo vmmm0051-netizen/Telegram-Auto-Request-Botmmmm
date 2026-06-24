@@ -60,30 +60,30 @@ async def cmd_start(msg: types.Message):
     
     await msg.answer(WELCOME_TEXT, reply_markup=kb)
 
-# 👇 WELCOME MESSAGE (DM me jayega join request approve hote hi)
+# 👇 UPDATED: Pehle DM bheje ga, phir Request Approve karega
 @dp.chat_join_request()
 async def auto_approve_join_request(update: types.ChatJoinRequest):
     """Safely auto-approve join requests and send DM"""
+    user_id = update.from_user.id
+    chat_title = update.chat.title
+    
+    # 1. PEHLE DM BHEJO
+    welcome_msg = (
+        f"👋 <b>Welcome {update.from_user.first_name}!</b>\n\n"
+        f"Aapki request approve ho gayi hai. Aapka <b>{chat_title}</b> mein swagat hai! 🎉"
+    )
     try:
-        # Request approve karo
-        await update.approve()
-        logging.info(f"Approved user {update.from_user.id} in chat {update.chat.id}")
-        
-        # User ko DM me Welcome msg bhejo
-        welcome_msg = (
-            f"👋 <b>Welcome {update.from_user.first_name}!</b>\n\n"
-            f"Aapki request approve ho gayi hai. Aapka <b>{update.chat.title}</b> mein swagat hai! 🎉"
-        )
-        try:
-            # yaha chat_id me from_user.id dalne se DM me jayega
-            await bot.send_message(chat_id=update.from_user.id, text=welcome_msg)
-            logging.info(f"Welcome DM sent to {update.from_user.id}")
-        except Exception as e:
-            logging.error(f"Welcome DM fail ho gaya (user privacy issue ho sakta hai): {e}")
+        await bot.send_message(chat_id=user_id, text=welcome_msg)
+        logging.info(f"Welcome DM successfully sent to {user_id}")
+    except Exception as e:
+        logging.error(f"Welcome DM bhejne mein dikkat (User strict privacy settings): {e}")
 
+    # 2. USKE BAAD REQUEST APPROVE KARO
+    try:
+        await update.approve()
+        logging.info(f"Approved user {user_id} in chat {update.chat.id}")
     except Exception as e:
         logging.error(f"Failed to approve user: {e}")
-
 
 # 👇 LEFT MESSAGE (DM me jayega jab koi channel chhode)
 @dp.chat_member()
@@ -95,12 +95,10 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
     if update.old_chat_member.status in ['member', 'administrator'] and update.new_chat_member.status in ['left', 'kicked']:
         goodbye_msg = f"😢 <b>Goodbye {user.first_name}!</b>\n\nAapne <b>{chat_title}</b> chhod diya hai."
         try:
-            # DM bhejne ki koshish (chat_id = user.id)
             await bot.send_message(chat_id=user.id, text=goodbye_msg)
             logging.info(f"Goodbye DM sent to {user.id}")
         except Exception as e:
-            # Agar user ne bot block kiya hoga ya start nahi kiya hoga, to yaha error aayega (normal hai)
-            logging.warning(f"Goodbye DM nahi bhej paye (User ne bot start nahi kiya hoga): {e}")
+            logging.warning(f"Goodbye DM nahi bhej paye (User ne bot block kiya hoga): {e}")
 
 
 # DUMMY WEB SERVER (Render ke liye)
