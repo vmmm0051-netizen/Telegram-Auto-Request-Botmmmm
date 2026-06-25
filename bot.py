@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums.parse_mode import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Logging setup
@@ -36,9 +36,8 @@ WELCOME_TEXT = (
     "┃  • Automatically approve join requests\n"
     "┃  • 100% Safe & Secure\n"
     "┃\n"
-    "┃  ⚡ <b>Quick Start:</b>\n"
-    "┃  Just add me to your Group or Channel\n"
-    "┃  as an Admin with 'Invite Users' rights!\n"
+    "┃  ⚡ <b>Commands:</b>\n"
+    "┃  /approveall [channel_id] - Approve all pending requests\n"
     "┃\n"
     "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯"
 )
@@ -60,10 +59,38 @@ async def cmd_start(msg: types.Message):
     
     await msg.answer(WELCOME_TEXT, reply_markup=kb)
 
+# 👇 NAYA FEATURE: Ek sath sabko approve karne ke liye
+@dp.message(Command("approveall"))
+async def cmd_approve_all(msg: types.Message):
+    """Bulk approve all pending requests for a specific chat"""
+    if msg.chat.type != "private":
+        return
+    
+    args = msg.text.split()
+    if len(args) != 2:
+        await msg.answer(
+            "❌ <b>Sahi format use karein:</b>\n"
+            "<code>/approveall &lt;channel_id&gt;</code>\n\n"
+            "<b>Example:</b> <code>/approveall -1001234567890</code>",
+            parse_mode=ParseMode.HTML
+        )
+        return
+    
+    chat_id = args[1]
+    status_msg = await msg.answer("⏳ <i>Saari pending requests approve ki ja rahi hain...</i>")
+    
+    try:
+        await bot.approve_all_chat_join_requests(chat_id=chat_id)
+        await status_msg.edit_text(f"✅ <b>Success!</b>\nChannel {chat_id} ki <b>SAARI</b> pending requests ek sath approve ho gayi hain!")
+        logging.info(f"Bulk approved all requests for {chat_id}")
+    except Exception as e:
+        await status_msg.edit_text(f"❌ <b>Error:</b>\n{str(e)}\n\n<i>Make sure bot channel me admin hai aur ID sahi hai (ID -100 se shuru hoti hai).</i>")
+        logging.error(f"Bulk approve failed for {chat_id}: {e}")
+
 # 👇 REQUEST APPROVE HANDLER (Silent - No Welcome MSG)
 @dp.chat_join_request()
 async def auto_approve_join_request(update: types.ChatJoinRequest):
-    """Safely auto-approve join requests silently"""
+    """Safely auto-approve new join requests silently"""
     user_id = update.from_user.id
     try:
         await update.approve()
@@ -71,21 +98,17 @@ async def auto_approve_join_request(update: types.ChatJoinRequest):
     except Exception as e:
         logging.error(f"Failed to approve user: {e}")
 
-# 👇 LEFT MESSAGE HANDLER (Naya msg update ke sath)
+# 👇 LEFT MESSAGE HANDLER (Aapka custom message)
 @dp.chat_member()
 async def on_chat_member_update(update: types.ChatMemberUpdated):
     user = update.from_user
 
-    # Agar koi LEFT karta hai (ya remove kiya jata hai)
     if update.old_chat_member.status in ['member', 'administrator'] and update.new_chat_member.status in ['left', 'kicked']:
-        
-        # Aapka naya Left message
         goodbye_msg = (
             "🌟 ALL DRAMA DIRECT FILES AVAILABLE 🗃️\n\n"
             "https://t.me/+amS1Q3R4_Qg5NjU1\n"
             "https://t.me/+amS1Q3R4_Qg5NjU1"
         )
-        
         try:
             await bot.send_message(chat_id=user.id, text=goodbye_msg)
             logging.info(f"Goodbye DM sent to {user.id}")
