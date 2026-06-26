@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import time
+import random
 from aiohttp import web
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -162,9 +163,17 @@ async def cmd_addfilter(msg: types.Message):
     if len(args) < 3: return await msg.reply("❌ Format: /addfilter keyword reply")
     
     chat_data = await get_chat_data(str(msg.chat.id))
-    chat_data['filters'][args[1].lower()] = args[2]
-    await update_chat_data(str(msg.chat.id), chat_data)
-    await msg.reply(f"✅ Filter <b>{args[1]}</b> added!")
+    keyword = args[1].lower()
+    reply_text = args[2]
+    
+    if keyword in chat_data['filters']:
+        chat_data['filters'][keyword] = reply_text
+        await update_chat_data(str(msg.chat.id), chat_data)
+        await msg.reply(f"⚠️ <b>Dhyan Dein:</b> '<code>{keyword}</code>' ka filter pehle se mojood tha! Maine usko naye message ke sath <b>UPDATE</b> kar diya hai. 🔄")
+    else:
+        chat_data['filters'][keyword] = reply_text
+        await update_chat_data(str(msg.chat.id), chat_data)
+        await msg.reply(f"✅ Naya Filter <b>{keyword}</b> successfully add ho gaya!")
 
 @dp.message(Command("delfilter"))
 async def cmd_delfilter(msg: types.Message):
@@ -220,7 +229,7 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
             try: await bot.send_message(chat_id=user.id, text=final_msg)
             except Exception: pass
 
-# --- FILTER LISTENER ---
+# --- FILTER LISTENER (RANDOM EMOJI & BOLD TEXT) ---
 @dp.message(F.text)
 async def filter_handler(msg: types.Message):
     if msg.chat.type == 'private' or msg.text.startswith('/'): return
@@ -228,7 +237,20 @@ async def filter_handler(msg: types.Message):
     
     for kw, reply in chat_data['filters'].items():
         if kw in msg.text.lower():
-            sent = await msg.reply(reply, link_preview_options=types.LinkPreviewOptions(is_disabled=True))
+            
+            # Har baar ek naya random emoji
+            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
+            random_emoji = random.choice(emoji_list)
+            
+            try:
+                await msg.react([types.ReactionTypeEmoji(emoji=random_emoji)])
+            except Exception:
+                pass 
+            
+            # Bold Reply text banaya gaya
+            bold_reply = f"<b>{reply}</b>"
+            sent = await msg.reply(bold_reply, link_preview_options=types.LinkPreviewOptions(is_disabled=True))
+            
             chat_data['cleanup'].append({
                 'chat_id': sent.chat.id, 'message_id': sent.message_id,
                 'delete_at': time.time() + 3600
