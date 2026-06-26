@@ -148,7 +148,7 @@ async def cmd_cancel(msg: types.Message, state: FSMContext):
     await state.clear()
     await msg.answer("❌ Process cancelled.")
 
-# --- GROUP FILTERS ---
+# --- GROUP FILTERS (UPDATED FOR MASS FILTER ADDITION FIX) ---
 async def is_admin(msg: types.Message) -> bool:
     if msg.sender_chat and str(msg.sender_chat.id) == str(msg.chat.id): return True
     try:
@@ -162,17 +162,23 @@ async def cmd_addfilter(msg: types.Message):
     args = msg.text.split(maxsplit=2)
     if len(args) < 3: return await msg.reply("❌ Format: /addfilter keyword reply")
     
-    chat_data = await get_chat_data(str(msg.chat.id))
     keyword = args[1].lower()
     reply_text = args[2]
     
-    if keyword in chat_data['filters']:
-        chat_data['filters'][keyword] = reply_text
-        await update_chat_data(str(msg.chat.id), chat_data)
+    # Check for duplicate filter to show warning
+    chat_data = await get_chat_data(str(msg.chat.id))
+    is_update = keyword in chat_data.get('filters', {})
+    
+    # Safe database update (Atomic operation - Prevents overwrite bug)
+    await settings_col.update_one(
+        {"chat_id": str(msg.chat.id)},
+        {"$set": {f"filters.{keyword}": reply_text}},
+        upsert=True
+    )
+    
+    if is_update:
         await msg.reply(f"⚠️ <b>Dhyan Dein:</b> '<code>{keyword}</code>' ka filter pehle se mojood tha! Maine usko naye message ke sath <b>UPDATE</b> kar diya hai. 🔄")
     else:
-        chat_data['filters'][keyword] = reply_text
-        await update_chat_data(str(msg.chat.id), chat_data)
         await msg.reply(f"✅ Naya Filter <b>{keyword}</b> successfully add ho gaya!")
 
 @dp.message(Command("delfilter"))
@@ -181,25 +187,31 @@ async def cmd_delfilter(msg: types.Message):
     args = msg.text.split(maxsplit=1)
     if len(args) < 2: return
     
-    chat_data = await get_chat_data(str(msg.chat.id))
-    if args[1].lower() in chat_data['filters']:
-        del chat_data['filters'][args[1].lower()]
-        await update_chat_data(str(msg.chat.id), chat_data)
-        await msg.reply(f"🗑️ Filter for <b>{args[1]}</b> deleted.")
+    keyword = args[1].lower()
+    
+    # Safe delete (Atomic Unset)
+    await settings_col.update_one(
+        {"chat_id": str(msg.chat.id)},
+        {"$unset": {f"filters.{keyword}": ""}}
+    )
+    await msg.reply(f"🗑️ Filter for <b>{keyword}</b> deleted.")
 
 @dp.message(Command("delallfilters"))
 async def cmd_delallfilters(msg: types.Message):
     if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
-    chat_data = await get_chat_data(str(msg.chat.id))
-    chat_data['filters'] = {}
-    await update_chat_data(str(msg.chat.id), chat_data)
+    
+    # Reset all filters safely
+    await settings_col.update_one(
+        {"chat_id": str(msg.chat.id)},
+        {"$set": {"filters": {}}}
+    )
     await msg.reply("🗑️ ✅ All active filters deleted.")
 
 @dp.message(Command("filters"))
 async def cmd_filters(msg: types.Message):
     if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
     chat_data = await get_chat_data(str(msg.chat.id))
-    if chat_data['filters']:
+    if chat_data.get('filters'):
         active_filters = "\n".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
         await msg.reply(f"📋 <b>Active Filters:</b>\n{active_filters}")
     else:
@@ -235,7 +247,7 @@ async def filter_handler(msg: types.Message):
     if msg.chat.type == 'private' or msg.text.startswith('/'): return
     chat_data = await get_chat_data(str(msg.chat.id))
     
-    for kw, reply in chat_data['filters'].items():
+    for kw, reply in chat_data.get('filters', {}).items():
         if kw in msg.text.lower():
             
             # Har baar ek naya random emoji
@@ -243,7 +255,7 @@ async def filter_handler(msg: types.Message):
             random_emoji = random.choice(emoji_list)
             
             try:
-                # 👇 Yahan is_big=True add kiya gaya hai screen par bada animation laane ke liye
+                # is_big=True for big screen animation pop-up
                 await msg.react([types.ReactionTypeEmoji(emoji=random_emoji)], is_big=True)
             except Exception:
                 pass 
@@ -252,11 +264,12 @@ async def filter_handler(msg: types.Message):
             bold_reply = f"<b>{reply}</b>"
             sent = await msg.reply(bold_reply, link_preview_options=types.LinkPreviewOptions(is_disabled=True))
             
+            # Safe cleanup update
             chat_data['cleanup'].append({
                 'chat_id': sent.chat.id, 'message_id': sent.message_id,
                 'delete_at': time.time() + 3600
             })
-            await update_chat_data(str(msg.chat.id), chat_data)
+            await update_chat_data(str(msg.chat.id), {"cleanup": chat_data['cleanup']})
             break
 
 # --- BACKGROUND CLEANUP ---
@@ -266,7 +279,7 @@ async def cleanup_background_task():
         async for chat in settings_col.find({"cleanup": {"$not": {"$size": 0}}}):
             current_time = time.time()
             valid_msgs = []
-            for item in chat['cleanup']:
+            for item in chat.get('cleanup', []):
                 if current_time >= item['delete_at']:
                     try: await bot.delete_message(chat_id=item['chat_id'], message_id=item['message_id'])
                     except: pass
