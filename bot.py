@@ -9,7 +9,6 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.filters import CommandStart, Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -18,6 +17,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
+PORT = int(os.environ.get("PORT", 10000))
 
 if not BOT_TOKEN or not MONGO_URI:
     raise RuntimeError('⚠️ BOT_TOKEN or MONGO_URI not set!')
@@ -29,18 +29,6 @@ dp = Dispatcher()
 client = AsyncIOMotorClient(MONGO_URI)
 db = client.bot_database
 settings_col = db.chat_settings
-
-# --- FSM STATES ---
-class MsgSetup(StatesGroup):
-    waiting_for_forward = State()
-    waiting_for_text = State()
-
-WELCOME_TEXT = "🤖 <b>SAFE AUTO REQUEST BOT IS ONLINE</b>"
-
-@dp.message(CommandStart())
-async def cmd_start(msg: types.Message, state: FSMContext):
-    if msg.chat.type != "private": return
-    await msg.answer(WELCOME_TEXT)
 
 # --- DATABASE HELPER FUNCTIONS ---
 async def get_chat_data(chat_id: str):
@@ -57,6 +45,11 @@ async def is_admin(msg: types.Message) -> bool:
         member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
         return member.status in ['administrator', 'creator']
     except: return False
+
+@dp.message(CommandStart())
+async def cmd_start(msg: types.Message):
+    if msg.chat.type != "private": return
+    await msg.answer("🤖 <b>SAFE AUTO REQUEST BOT IS ONLINE (MongoDB Active)</b>")
 
 @dp.message(Command("addfilter"))
 async def cmd_addfilter(msg: types.Message):
@@ -79,7 +72,25 @@ async def cmd_delfilter(msg: types.Message):
     if args[1].lower() in chat_data['filters']:
         del chat_data['filters'][args[1].lower()]
         await update_chat_data(str(msg.chat.id), chat_data)
-        await msg.reply("🗑️ Filter deleted.")
+        await msg.reply(f"🗑️ Filter for <b>{args[1]}</b> deleted.")
+
+@dp.message(Command("delallfilters"))
+async def cmd_delallfilters(msg: types.Message):
+    if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
+    chat_data = await get_chat_data(str(msg.chat.id))
+    chat_data['filters'] = {}
+    await update_chat_data(str(msg.chat.id), chat_data)
+    await msg.reply("🗑️ ✅ All active filters deleted.")
+
+@dp.message(Command("filters"))
+async def cmd_filters(msg: types.Message):
+    if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
+    chat_data = await get_chat_data(str(msg.chat.id))
+    if chat_data['filters']:
+        active_filters = "\n".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
+        await msg.reply(f"📋 <b>Active Filters:</b>\n{active_filters}")
+    else:
+        await msg.reply("No active filters in this group.")
 
 @dp.message(F.text)
 async def filter_handler(msg: types.Message):
@@ -110,7 +121,20 @@ async def cleanup_background_task():
                 else: valid_msgs.append(item)
             await update_chat_data(chat['chat_id'], {"cleanup": valid_msgs})
 
+# --- RENDER DUMMY WEB SERVER (Yahi missing tha) ---
+async def handle_ping(request): 
+    return web.Response(text="Bot is running smoothly on Render!")
+
+async def start_dummy_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
+
 async def main():
+    await start_dummy_server()
     asyncio.create_task(cleanup_background_task())
     await dp.start_polling(bot)
 
