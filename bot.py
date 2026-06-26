@@ -87,7 +87,7 @@ async def cmd_help(msg: types.Message):
         "<b>2. Group Filters (Bot replies auto-delete after 1 hr):</b>\n"
         "• <code>/addfilter &lt;word&gt; &lt;reply_text&gt;</code> - Add permanent filter\n"
         "• <code>/delfilter &lt;word&gt;</code> - Delete a single filter\n"
-        "• <code>/delallfilters</code> - Delete all filters in the group\n"
+        "• <code>/delallfilters</code> - Delete all filters\n"
         "• <code>/filters</code> - View active filters\n\n"
         "<i>Note: You must be an Admin to use these commands.</i>"
     )
@@ -107,7 +107,7 @@ async def start_setting_msg(msg: types.Message, state: FSMContext):
 @dp.message(MsgSetup.waiting_for_forward)
 async def process_forwarded_msg(msg: types.Message, state: FSMContext):
     if not msg.forward_origin or msg.forward_origin.type != 'channel':
-        await msg.answer("❌ This is not a forwarded message from a channel. Please try again or send /cancel.")
+        await msg.answer("❌ This is not a forwarded message from a channel.")
         return
     channel_id = str(msg.forward_origin.chat.id)
     channel_title = msg.forward_origin.chat.title
@@ -151,12 +151,23 @@ async def cmd_cancel(msg: types.Message, state: FSMContext):
     await state.clear()
     await msg.answer("❌ Process cancelled.")
 
-# --- GROUP FILTER COMMANDS (PERMANENT FILTERS) ---
+# 👇 SMART ADMIN CHECK (Personal + Anonymous Support)
+async def is_admin(msg: types.Message) -> bool:
+    # Agar chat as a Group (Anonymous) aayi hai
+    if msg.sender_chat and str(msg.sender_chat.id) == str(msg.chat.id):
+        return True
+    # Agar personal ID se aayi hai
+    try:
+        member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
+        return member.status in ['administrator', 'creator']
+    except Exception:
+        return False
+
+# --- GROUP FILTER COMMANDS ---
 @dp.message(Command("addfilter"))
 async def cmd_addfilter(msg: types.Message):
     if msg.chat.type in ['private', 'channel']: return
-    member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
-    if member.status not in ['administrator', 'creator']: return
+    if not await is_admin(msg): return
 
     args = msg.text.split(maxsplit=2)
     if len(args) < 3:
@@ -177,8 +188,7 @@ async def cmd_addfilter(msg: types.Message):
 @dp.message(Command("delfilter"))
 async def cmd_delfilter(msg: types.Message):
     if msg.chat.type in ['private', 'channel']: return
-    member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
-    if member.status not in ['administrator', 'creator']: return
+    if not await is_admin(msg): return
 
     args = msg.text.split(maxsplit=1)
     if len(args) < 2:
@@ -195,12 +205,10 @@ async def cmd_delfilter(msg: types.Message):
     else:
         await msg.reply("❌ Keyword not found in active filters.")
 
-# 👇 NAYA COMMAND: ALL FILTERS DELETE
 @dp.message(Command("delallfilters"))
 async def cmd_delallfilters(msg: types.Message):
     if msg.chat.type in ['private', 'channel']: return
-    member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
-    if member.status not in ['administrator', 'creator']: return
+    if not await is_admin(msg): return
 
     chat_id = str(msg.chat.id)
 
@@ -214,6 +222,8 @@ async def cmd_delallfilters(msg: types.Message):
 @dp.message(Command("filters"))
 async def cmd_filters(msg: types.Message):
     if msg.chat.type in ['private', 'channel']: return
+    if not await is_admin(msg): return
+    
     chat_id = str(msg.chat.id)
 
     if chat_id in chat_settings and 'filters' in chat_settings[chat_id] and chat_settings[chat_id]['filters']:
@@ -244,7 +254,7 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
             try: await bot.send_message(chat_id=user.id, text=final_msg)
             except Exception: pass 
 
-# 👇 KEYWORD FILTER LISTENER (BOT REPLIES & TRACKS THEM)
+# 👇 KEYWORD FILTER LISTENER 
 @dp.message(F.text)
 async def filter_handler(msg: types.Message):
     if msg.chat.type == 'private' or msg.text.startswith('/'): return
