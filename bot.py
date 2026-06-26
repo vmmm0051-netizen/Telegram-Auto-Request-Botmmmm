@@ -229,7 +229,7 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
             try: await bot.send_message(chat_id=user.id, text=final_msg)
             except Exception: pass
 
-# --- FILTER LISTENER (RANDOM EMOJI & BOLD TEXT) ---
+# --- FILTER LISTENER (BIG RANDOM EMOJI & BOLD TEXT) ---
 @dp.message(F.text)
 async def filter_handler(msg: types.Message):
     if msg.chat.type == 'private' or msg.text.startswith('/'): return
@@ -243,7 +243,8 @@ async def filter_handler(msg: types.Message):
             random_emoji = random.choice(emoji_list)
             
             try:
-                await msg.react([types.ReactionTypeEmoji(emoji=random_emoji)])
+                # 👇 Yahan is_big=True add kiya gaya hai screen par bada animation laane ke liye
+                await msg.react([types.ReactionTypeEmoji(emoji=random_emoji)], is_big=True)
             except Exception:
                 pass 
             
