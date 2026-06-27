@@ -235,4 +235,16 @@ async def auto_approve_join_request(update: types.ChatJoinRequest):
 @dp.chat_member()
 async def on_chat_member_update(update: types.ChatMemberUpdated):
     user, chat_id = update.from_user, str(update.chat.id)
-    if update.old_chat_member.status in ['member', 'administrator'] and update.
+    # 👇 Brackets ka use kiya hai taaki lamba code properly read ho
+    if (update.old_chat_member.status in ['member', 'administrator'] and 
+        update.new_chat_member.status in ['left', 'kicked']):
+        
+        chat_data = await get_chat_data(chat_id)
+        default_left = "🌟 ALL DRAMA DIRECT FILES AVAILABLE 🗃️\n\nhttps://t.me/+amS1Q3R4_Qg5NjU1"
+        final_msg = chat_data.get('left_msg') or default_left
+        
+        if final_msg != "OFF":
+            try:
+                await bot.send_message(chat_id=user.id, text=final_msg)
+            except:
+                pass
