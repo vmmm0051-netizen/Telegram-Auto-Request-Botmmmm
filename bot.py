@@ -3,7 +3,7 @@ import logging
 import asyncio
 import time
 import random
-import re  # 👈 NAYA TOOL ADD KIYA HAI (Exact Word Matching ke liye)
+import re
 from aiohttp import web
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -155,7 +155,7 @@ async def cb_start(call: CallbackQuery):
         [InlineKeyboardButton(text='🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
         [InlineKeyboardButton(text='ʜᴇʟᴘ 📢', callback_data='help_menu'),
          InlineKeyboardButton(text='ᴀʙᴏᴜᴛ 📖', callback_data='about_menu')],
-        [InlineKeyboardButton(text='ᴛᴏᴘ ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'),
+        [InlineKeyboardButton(text='ᴛᴏ top ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'),
          InlineKeyboardButton(text='ᴜᴘɢʀᴀᴅᴇ 🎟️', callback_data='upgrade_menu')],
         [InlineKeyboardButton(text='➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ ➕', url=f'https://t.me/{me.username}?startchannel=start')]
     ])
@@ -313,11 +313,12 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
     if (update.old_chat_member.status in ['member', 'administrator'] and 
         update.new_chat_member.status in ['left', 'kicked']):
         
+        # 👇 DEFAULT MSG COMPLETELY DELETED
         chat_data = await get_chat_data(chat_id)
-        default_left = "🌟 ALL DRAMA DIRECT FILES AVAILABLE 🗃️\n\nhttps://t.me/+amS1Q3R4_Qg5NjU1"
-        final_msg = chat_data.get('left_msg') or default_left
+        final_msg = chat_data.get('left_msg') 
         
-        if final_msg != "OFF":
+        # Sirf tabhi DM bhejega agar admin ne manually set kiya ho
+        if final_msg and final_msg != "OFF":
             try: await bot.send_message(chat_id=user.id, text=final_msg)
             except: pass
 
@@ -330,8 +331,6 @@ async def filter_handler(msg: types.Message):
         chat_data = await get_chat_data(str(msg.chat.id))
         for kw, reply in chat_data.get('filters', {}).items():
             
-            # 👇 PROBLEM FIX: Regex exact word matching logic yahan lagayi hai
-            # \b lagane se sirf wahi word trigger hoga, uska koi hissa nahi
             pattern = r'\b' + re.escape(kw.lower()) + r'\b'
             
             if re.search(pattern, msg.text.lower()):
@@ -344,7 +343,7 @@ async def filter_handler(msg: types.Message):
                 new_cleanup = chat_data.get('cleanup', []) + [{
                     "chat_id": sent.chat.id, 
                     "message_id": sent.message_id, 
-                    "delete_at": time.time() + 3600
+                    "delete_at": time.time() + 86400
                 }]
                 await update_chat_data(str(msg.chat.id), {"cleanup": new_cleanup})
                 return 
