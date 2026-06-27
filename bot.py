@@ -14,26 +14,16 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQu
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from google import genai 
-
 # --- LOGGING & CONFIG ---
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 PORT = int(os.environ.get("PORT", 10000))
 
 if not BOT_TOKEN or not MONGO_URI:
     raise RuntimeError('⚠️ BOT_TOKEN or MONGO_URI not set!')
-
-# --- NEW GEMINI AI SETUP ---
-if GEMINI_API_KEY:
-    ai_client = genai.Client(api_key=GEMINI_API_KEY)
-else:
-    ai_client = None
-    logging.warning("⚠️ GEMINI_API_KEY missing! AI Chatbot feature won't work.")
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
@@ -75,7 +65,7 @@ async def cmd_start(msg: types.Message, state: FSMContext):
     ])
     WELCOME_TEXT = (
         "╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮\n"
-        "┃  🤖 <b>SAFE AUTO REQUEST + AI BOT</b>\n"
+        "┃  🤖 <b>SAFE AUTO REQUEST BOT</b>\n"
         "┃━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "┃  📌 <b>Commands:</b>\n"
         "┃  /help - Learn how to use this bot\n"
@@ -97,8 +87,7 @@ async def cmd_help(msg: types.Message):
         "<b>2. Group Filters:</b>\n"
         "• <code>/addfilter &lt;word&gt; &lt;reply_text&gt;</code>\n"
         "• <code>/delfilter &lt;word&gt;</code>\n"
-        "• <code>/filters</code>\n\n"
-        "💡 <i>AI is active directly on every text! (Auto-deletes in 5 mins)</i>"
+        "• <code>/filters</code>"
     )
     await msg.answer(help_text)
 
@@ -246,12 +235,12 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
             try: await bot.send_message(chat_id=user.id, text=final_msg)
             except: pass
 
-# --- MAIN LISTENER (FILTERS + BIG EMOJI + DIRECT AI) ---
+# --- MAIN LISTENER (ONLY FILTERS + BIG EMOJI - NO AI) ---
 @dp.message(F.text)
 async def filter_handler(msg: types.Message):
     if msg.text.startswith('/'): return
     
-    # 1. GROUP FILTERS LOGIC
+    # Only group chats check
     if msg.chat.type != 'private':
         chat_data = await get_chat_data(str(msg.chat.id))
         for kw, reply in chat_data.get('filters', {}).items():
@@ -262,57 +251,16 @@ async def filter_handler(msg: types.Message):
                 
                 sent = await msg.reply(f"<b>{reply}</b>", link_preview_options=types.LinkPreviewOptions(is_disabled=True))
                 
+                # Cleanup Data (1 Hour edit)
                 new_cleanup = chat_data.get('cleanup', []) + [{
                     "chat_id": sent.chat.id, 
                     "message_id": sent.message_id, 
-                    "delete_at": time.time() + 3600,
-                    "type": "filter"
+                    "delete_at": time.time() + 3600
                 }]
                 await update_chat_data(str(msg.chat.id), {"cleanup": new_cleanup})
                 return 
 
-    # 2. DIRECT AI CHATBOT LOGIC
-    if not ai_client: return
-    prompt = msg.text.strip()
-    if not prompt: return
-    
-    await bot.send_chat_action(chat_id=msg.chat.id, action="typing")
-    try:
-        system_instruction = (
-            "You are a friendly Movie & K-Drama expert chatbot in a Telegram Group. "
-            "Provide quick summaries, story explanations, or recommendations. "
-            "Keep answers engaging and strictly reply in Hinglish/Hindi language as requested by Indian users."
-        )
-        
-                # 👇 BAS YAHAN MODEL KA NAAM UPDATE KARNA HAI
-        def fetch_ai_reply():
-            return ai_client.models.generate_content(
-                model='gemini-2.5-flash',  # <-- Isey 2.0 se 2.5 kar dijiye
-                contents=f"{system_instruction}\n\nUser Question: {prompt}"
-            )
-
-        
-        response = await asyncio.to_thread(fetch_ai_reply)
-        
-        try:
-            sent_ai = await msg.reply(response.text, parse_mode=ParseMode.MARKDOWN)
-        except:
-            sent_ai = await msg.reply(response.text, parse_mode=None)
-            
-        if sent_ai:
-            ai_chat_data = await get_chat_data(str(msg.chat.id))
-            new_ai_cleanup = ai_chat_data.get('cleanup', []) + [{
-                "chat_id": sent_ai.chat.id,
-                "message_id": sent_ai.message_id,
-                "delete_at": time.time() + 300, 
-                "type": "ai"
-            }]
-            await update_chat_data(str(msg.chat.id), {"cleanup": new_ai_cleanup})
-            
-    except Exception as e:
-        logging.error(f"AI Generation Error: {e}")
-
-# --- BACKGROUND CLEANUP TASK (EDIT FILTERS / DELETE AI) ---
+# --- BACKGROUND CLEANUP TASK (EDIT FILTERS PERMANENTLY) ---
 async def cleanup_task():
     while True:
         await asyncio.sleep(60)
@@ -321,21 +269,18 @@ async def cleanup_task():
             for item in chat.get('cleanup', []):
                 if time.time() >= item['delete_at']:
                     try:
-                        if item.get('type') == 'ai':
-                            await bot.delete_message(chat_id=item['chat_id'], message_id=item['message_id'])
-                        else:
-                            await bot.edit_message_text(
-                                chat_id=item['chat_id'], 
-                                message_id=item['message_id'],
-                                text="💖 Just send the title, and I'll get it for you instantly! 👇"
-                            )
+                        await bot.edit_message_text(
+                            chat_id=item['chat_id'], 
+                            message_id=item['message_id'],
+                            text="💖 Just send the title, and I'll get it for you instantly! 👇"
+                        )
                     except: pass
                 else: valid.append(item)
             await update_chat_data(chat['chat_id'], {"cleanup": valid})
 
 # --- RENDER WEB SERVER (ANTI-CRASH) ---
 async def handle_ping(request): 
-    return web.Response(text="Bot is running smoothly on Render with Gemini 2.0!")
+    return web.Response(text="Bot is running smoothly on Render without AI!")
 
 async def start_dummy_server():
     app = web.Application()
