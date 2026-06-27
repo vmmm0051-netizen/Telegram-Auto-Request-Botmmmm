@@ -262,7 +262,6 @@ async def filter_handler(msg: types.Message):
                 
                 sent = await msg.reply(f"<b>{reply}</b>", link_preview_options=types.LinkPreviewOptions(is_disabled=True))
                 
-                # Filter Cleanup Data
                 new_cleanup = chat_data.get('cleanup', []) + [{
                     "chat_id": sent.chat.id, 
                     "message_id": sent.message_id, 
@@ -272,7 +271,7 @@ async def filter_handler(msg: types.Message):
                 await update_chat_data(str(msg.chat.id), {"cleanup": new_cleanup})
                 return 
 
-    # 2. DIRECT AI CHATBOT LOGIC (Bug Fixed)
+    # 2. DIRECT AI CHATBOT LOGIC
     if not ai_client: return
     prompt = msg.text.strip()
     if not prompt: return
@@ -285,14 +284,13 @@ async def filter_handler(msg: types.Message):
             "Keep answers engaging and strictly reply in Hinglish/Hindi language as requested by Indian users."
         )
         
-        # 👇 Yahan error tha! Ab hum isko ek alag safe thread me run kar rahe hain
+        # 👇 YAHAN MAINE MODEL KA NAAM UPDATE KAR DIYA HAI (gemini-2.0-flash)
         def fetch_ai_reply():
             return ai_client.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-2.0-flash', 
                 contents=f"{system_instruction}\n\nUser Question: {prompt}"
             )
         
-        # Asyncio to_thread library conflict ko bypass kar dega
         response = await asyncio.to_thread(fetch_ai_reply)
         
         try:
@@ -336,7 +334,7 @@ async def cleanup_task():
 
 # --- RENDER WEB SERVER (ANTI-CRASH) ---
 async def handle_ping(request): 
-    return web.Response(text="Bot is running smoothly on Render with Sync Threading!")
+    return web.Response(text="Bot is running smoothly on Render with Gemini 2.0!")
 
 async def start_dummy_server():
     app = web.Application()
