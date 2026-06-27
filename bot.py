@@ -284,12 +284,13 @@ async def filter_handler(msg: types.Message):
             "Keep answers engaging and strictly reply in Hinglish/Hindi language as requested by Indian users."
         )
         
-        # 👇 YAHAN MAINE MODEL KA NAAM UPDATE KAR DIYA HAI (gemini-2.0-flash)
+                # 👇 BAS YAHAN MODEL KA NAAM UPDATE KARNA HAI
         def fetch_ai_reply():
             return ai_client.models.generate_content(
-                model='gemini-2.0-flash', 
+                model='gemini-2.5-flash',  # <-- Isey 2.0 se 2.5 kar dijiye
                 contents=f"{system_instruction}\n\nUser Question: {prompt}"
             )
+
         
         response = await asyncio.to_thread(fetch_ai_reply)
         
