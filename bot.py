@@ -3,7 +3,6 @@ import logging
 import asyncio
 import time
 import random
-import google.generativeai as genai
 from aiohttp import web
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -14,6 +13,9 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+
+# 👇 Google ki bilkul nayi library import
+from google import genai 
 
 # --- LOGGING & CONFIG ---
 logging.basicConfig(level=logging.INFO)
@@ -27,12 +29,12 @@ PORT = int(os.environ.get("PORT", 10000))
 if not BOT_TOKEN or not MONGO_URI:
     raise RuntimeError('⚠️ BOT_TOKEN or MONGO_URI not set!')
 
-# --- GEMINI AI SETUP ---
+# --- NEW GEMINI AI SETUP ---
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    # Nayi library mein Client setup kiya jata hai
+    ai_client = genai.Client(api_key=GEMINI_API_KEY)
 else:
-    ai_model = None
+    ai_client = None
     logging.warning("⚠️ GEMINI_API_KEY missing! AI Chatbot feature won't work.")
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -235,7 +237,6 @@ async def auto_approve_join_request(update: types.ChatJoinRequest):
 @dp.chat_member()
 async def on_chat_member_update(update: types.ChatMemberUpdated):
     user, chat_id = update.from_user, str(update.chat.id)
-    # 👇 Brackets ka use kiya hai taaki lamba code properly read ho
     if (update.old_chat_member.status in ['member', 'administrator'] and 
         update.new_chat_member.status in ['left', 'kicked']):
         
@@ -244,7 +245,111 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
         final_msg = chat_data.get('left_msg') or default_left
         
         if final_msg != "OFF":
-            try:
-                await bot.send_message(chat_id=user.id, text=final_msg)
-            except:
-                pass
+            try: await bot.send_message(chat_id=user.id, text=final_msg)
+            except: pass
+
+# --- MAIN LISTENER (FILTERS + BIG EMOJI + DIRECT AI) ---
+@dp.message(F.text)
+async def filter_handler(msg: types.Message):
+    if msg.text.startswith('/'): return
+    
+    # 1. GROUP FILTERS LOGIC
+    if msg.chat.type != 'private':
+        chat_data = await get_chat_data(str(msg.chat.id))
+        for kw, reply in chat_data.get('filters', {}).items():
+            if kw in msg.text.lower():
+                emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
+                try: await msg.react([types.ReactionTypeEmoji(emoji=random.choice(emoji_list))], is_big=True)
+                except: pass
+                
+                sent = await msg.reply(f"<b>{reply}</b>", link_preview_options=types.LinkPreviewOptions(is_disabled=True))
+                
+                # Filter Cleanup Data (Type: filter, 1 Hour)
+                new_cleanup = chat_data.get('cleanup', []) + [{
+                    "chat_id": sent.chat.id, 
+                    "message_id": sent.message_id, 
+                    "delete_at": time.time() + 3600,
+                    "type": "filter"
+                }]
+                await update_chat_data(str(msg.chat.id), {"cleanup": new_cleanup})
+                return 
+
+    # 2. DIRECT AI CHATBOT LOGIC (New SDK Code)
+    if not ai_client: return
+    prompt = msg.text.strip()
+    if not prompt: return
+    
+    await bot.send_chat_action(chat_id=msg.chat.id, action="typing")
+    try:
+        system_instruction = (
+            "You are a friendly Movie & K-Drama expert chatbot in a Telegram Group. "
+            "Provide quick summaries, story explanations, or recommendations. "
+            "Keep answers engaging and strictly reply in Hinglish/Hindi language as requested by Indian users."
+        )
+        
+        # 👇 Naya Async Generate Content Method
+        response = await ai_client.aio.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=f"{system_instruction}\n\nUser Question: {prompt}"
+        )
+        
+        try:
+            sent_ai = await msg.reply(response.text, parse_mode=ParseMode.MARKDOWN)
+        except:
+            sent_ai = await msg.reply(response.text, parse_mode=None)
+            
+        if sent_ai:
+            ai_chat_data = await get_chat_data(str(msg.chat.id))
+            # AI Cleanup Data (Type: ai, 5 Minutes)
+            new_ai_cleanup = ai_chat_data.get('cleanup', []) + [{
+                "chat_id": sent_ai.chat.id,
+                "message_id": sent_ai.message_id,
+                "delete_at": time.time() + 300, 
+                "type": "ai"
+            }]
+            await update_chat_data(str(msg.chat.id), {"cleanup": new_ai_cleanup})
+            
+    except Exception as e:
+        logging.error(f"AI Generation Error: {e}")
+
+# --- BACKGROUND CLEANUP TASK (EDIT FILTERS / DELETE AI) ---
+async def cleanup_task():
+    while True:
+        await asyncio.sleep(60)
+        async for chat in settings_col.find({"cleanup": {"$not": {"$size": 0}}}):
+            valid = []
+            for item in chat.get('cleanup', []):
+                if time.time() >= item['delete_at']:
+                    try:
+                        if item.get('type') == 'ai':
+                            await bot.delete_message(chat_id=item['chat_id'], message_id=item['message_id'])
+                        else:
+                            await bot.edit_message_text(
+                                chat_id=item['chat_id'], 
+                                message_id=item['message_id'],
+                                text="💖 Just send the title, and I'll get it for you instantly! 👇"
+                            )
+                    except: pass
+                else: valid.append(item)
+            await update_chat_data(chat['chat_id'], {"cleanup": valid})
+
+# --- RENDER WEB SERVER (ANTI-CRASH) ---
+async def handle_ping(request): 
+    return web.Response(text="Bot is running smoothly on Render with New Google GenAI SDK!")
+
+async def start_dummy_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, '0.0.0.0', PORT).start()
+
+# --- MAIN BOOT ---
+async def main():
+    await bot.delete_webhook(drop_pending_updates=True) 
+    await start_dummy_server()
+    asyncio.create_task(cleanup_task())
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
