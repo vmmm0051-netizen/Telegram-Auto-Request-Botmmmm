@@ -3,6 +3,7 @@ import logging
 import asyncio
 import time
 import random
+import google.generativeai as genai
 from aiohttp import web
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -10,19 +11,29 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.filters import CommandStart, Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+# --- LOGGING & CONFIG ---
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 PORT = int(os.environ.get("PORT", 10000))
 
 if not BOT_TOKEN or not MONGO_URI:
     raise RuntimeError('⚠️ BOT_TOKEN or MONGO_URI not set!')
+
+# --- GEMINI AI SETUP ---
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    ai_model = None
+    logging.warning("⚠️ GEMINI_API_KEY missing! AI Chatbot feature won't work.")
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
@@ -37,7 +48,7 @@ class MsgSetup(StatesGroup):
     waiting_for_forward = State()
     waiting_for_text = State()
 
-# --- DATABASE HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS ---
 async def get_chat_data(chat_id: str):
     data = await settings_col.find_one({"chat_id": chat_id})
     return data if data else {"chat_id": chat_id, "filters": {}, "cleanup": [], "welcome_msg": None, "left_msg": None}
@@ -45,32 +56,32 @@ async def get_chat_data(chat_id: str):
 async def update_chat_data(chat_id: str, update_dict: dict):
     await settings_col.update_one({"chat_id": chat_id}, {"$set": update_dict}, upsert=True)
 
-# --- START & HELP ---
-async def get_welcome_kb(bot_username: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='➕ Add to Group', url=f'https://t.me/{bot_username}?startgroup=true')],
-        [InlineKeyboardButton(text='➕ Add to Channel', url=f'https://t.me/{bot_username}?startchannel=start')]
-    ])
+async def is_admin(msg: types.Message) -> bool:
+    if msg.sender_chat and str(msg.sender_chat.id) == str(msg.chat.id): return True
+    try:
+        member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
+        return member.status in ['administrator', 'creator']
+    except: return False
 
+# --- COMMANDS ---
 @dp.message(CommandStart())
 async def cmd_start(msg: types.Message, state: FSMContext):
     if msg.chat.type != "private": return
     await state.clear()
     me = await bot.get_me()
-    kb = await get_welcome_kb(me.username)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='➕ Add to Group', url=f'https://t.me/{me.username}?startgroup=true')],
+        [InlineKeyboardButton(text='➕ Add to Channel', url=f'https://t.me/{me.username}?startchannel=start')]
+    ])
     WELCOME_TEXT = (
         "╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮\n"
-        "┃  🤖 <b>SAFE AUTO REQUEST BOT</b>\n"
+        "┃  🤖 <b>SAFE AUTO REQUEST + AI BOT</b>\n"
         "┃━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "┃\n"
         "┃  📌 <b>Commands:</b>\n"
         "┃  /help - Learn how to use this bot\n"
         "┃  /setwelcome - Set welcome message\n"
         "┃  /setleft - Set goodbye message\n"
-        "┃  /offwelcome - Turn OFF welcome\n"
-        "┃  /offleft - Turn OFF goodbye\n"
         "┃  /cancel - Cancel process\n"
-        "┃\n"
         "╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯"
     )
     await msg.answer(WELCOME_TEXT, reply_markup=kb)
@@ -81,15 +92,13 @@ async def cmd_help(msg: types.Message):
     help_text = (
         "📖 <b>How to Use This Bot:</b>\n\n"
         "<b>1. Channel DMs (Welcome/Left):</b>\n"
-        "• Send <code>/setwelcome</code> or <code>/setleft</code> in my DM.\n"
-        "• Forward a message from your channel.\n"
-        "• Type your custom text.\n\n"
-        "<b>2. Group Filters (Bot replies auto-delete after 1 hr):</b>\n"
-        "• <code>/addfilter &lt;word&gt; &lt;reply_text&gt;</code> - Add permanent filter\n"
-        "• <code>/delfilter &lt;word&gt;</code> - Delete a single filter\n"
-        "• <code>/delallfilters</code> - Delete all filters\n"
-        "• <code>/filters</code> - View active filters\n\n"
-        "<i>Note: You must be an Admin to use these commands.</i>"
+        "• <code>/setwelcome</code> & <code>/setleft</code> to set msgs.\n"
+        "• <code>/offwelcome</code> & <code>/offleft</code> to turn off.\n\n"
+        "<b>2. Group Filters:</b>\n"
+        "• <code>/addfilter &lt;word&gt; &lt;reply_text&gt;</code>\n"
+        "• <code>/delfilter &lt;word&gt;</code>\n"
+        "• <code>/filters</code>\n\n"
+        "💡 <i>AI is active directly on every text! (Auto-deletes in 5 mins)</i>"
     )
     await msg.answer(help_text)
 
@@ -107,18 +116,16 @@ async def start_setting_msg(msg: types.Message, state: FSMContext):
 @dp.message(MsgSetup.waiting_for_forward)
 async def process_forwarded_msg(msg: types.Message, state: FSMContext):
     if not msg.forward_origin or msg.forward_origin.type != 'channel':
-        await msg.answer("❌ This is not a forwarded message from a channel.")
-        return
+        return await msg.answer("❌ This is not a forwarded message from a channel.")
+    
     channel_id = str(msg.forward_origin.chat.id)
     channel_title = msg.forward_origin.chat.title
     try:
         member = await bot.get_chat_member(chat_id=channel_id, user_id=msg.from_user.id)
         if member.status not in ['administrator', 'creator']:
-            await msg.answer("❌ You are not an Admin of this channel!")
-            return
+            return await msg.answer("❌ You are not an Admin of this channel!")
     except Exception:
-        await msg.answer("❌ Please make the bot an Admin in your channel first.")
-        return
+        return await msg.answer("❌ Please make the bot an Admin in your channel first.")
 
     data = await state.get_data()
     msg_type, action = data['msg_type'], data['action']
@@ -126,8 +133,7 @@ async def process_forwarded_msg(msg: types.Message, state: FSMContext):
     if action == "off":
         await update_chat_data(channel_id, {msg_type: "OFF"})
         await msg.answer(f"✅ The message for '{channel_title}' has been turned <b>OFF</b>.")
-        await state.clear()
-        return
+        return await state.clear()
 
     await state.update_data(channel_id=channel_id, channel_title=channel_title)
     await state.set_state(MsgSetup.waiting_for_text)
@@ -135,9 +141,7 @@ async def process_forwarded_msg(msg: types.Message, state: FSMContext):
 
 @dp.message(MsgSetup.waiting_for_text)
 async def process_custom_msg(msg: types.Message, state: FSMContext):
-    if not msg.text: 
-        await msg.answer("❌ Please send text only.")
-        return
+    if not msg.text: return await msg.answer("❌ Please send text only.")
     data = await state.get_data()
     await update_chat_data(data['channel_id'], {data['msg_type']: msg.html_text})
     await msg.answer(f"✅ Message successfully set:\n\n{msg.html_text}")
@@ -148,63 +152,63 @@ async def cmd_cancel(msg: types.Message, state: FSMContext):
     await state.clear()
     await msg.answer("❌ Process cancelled.")
 
-# --- GROUP FILTERS (UPDATED FOR MASS FILTER ADDITION FIX) ---
-async def is_admin(msg: types.Message) -> bool:
-    if msg.sender_chat and str(msg.sender_chat.id) == str(msg.chat.id): return True
-    try:
-        member = await bot.get_chat_member(msg.chat.id, msg.from_user.id)
-        return member.status in ['administrator', 'creator']
-    except: return False
-
+# --- GROUP FILTERS (WITH ADMIN OVERWRITE APPROVAL) ---
 @dp.message(Command("addfilter"))
-async def cmd_addfilter(msg: types.Message):
+async def cmd_addfilter(msg: types.Message, state: FSMContext):
     if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
     args = msg.text.split(maxsplit=2)
     if len(args) < 3: return await msg.reply("❌ Format: /addfilter keyword reply")
     
-    keyword = args[1].lower()
-    reply_text = args[2]
-    
-    # Check for duplicate filter to show warning
+    keyword, reply_text = args[1].lower(), args[2]
     chat_data = await get_chat_data(str(msg.chat.id))
     is_update = keyword in chat_data.get('filters', {})
     
-    # Safe database update (Atomic operation - Prevents overwrite bug)
-    await settings_col.update_one(
-        {"chat_id": str(msg.chat.id)},
-        {"$set": {f"filters.{keyword}": reply_text}},
-        upsert=True
-    )
-    
     if is_update:
-        await msg.reply(f"⚠️ <b>Dhyan Dein:</b> '<code>{keyword}</code>' ka filter pehle se mojood tha! Maine usko naye message ke sath <b>UPDATE</b> kar diya hai. 🔄")
+        await state.update_data(pending_keyword=keyword, pending_reply=reply_text)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Yes, Update", callback_data="filter_update_yes"),
+             InlineKeyboardButton(text="❌ No, Cancel", callback_data="filter_update_no")]
+        ])
+        await msg.reply(f"⚠️ <b>Wait!</b> '<code>{keyword}</code>' ka filter pehle se mojood hai.\n\nKya aap ise naye message ke sath <b>OVERWRITE</b> karne ki permission dete hain?", reply_markup=kb)
     else:
+        await settings_col.update_one({"chat_id": str(msg.chat.id)}, {"$set": {f"filters.{keyword}": reply_text}}, upsert=True)
         await msg.reply(f"✅ Naya Filter <b>{keyword}</b> successfully add ho gaya!")
+
+@dp.callback_query(F.data.startswith("filter_update_"))
+async def process_filter_update(call: CallbackQuery, state: FSMContext):
+    try:
+        member = await bot.get_chat_member(call.message.chat.id, call.from_user.id)
+        if member.status not in ['administrator', 'creator']:
+            return await call.answer("❌ Sirf Admin hi approve kar sakte hain!", show_alert=True)
+    except: return await call.answer("❌ Error verifying admin.", show_alert=True)
+
+    action = call.data.split("_")[-1]
+    if action == "no":
+        await state.clear()
+        return await call.message.edit_text("❌ Update cancel kar diya gaya hai. Purana filter safe hai.")
+        
+    if action == "yes":
+        data = await state.get_data()
+        keyword, reply_text = data.get("pending_keyword"), data.get("pending_reply")
+        if not keyword or not reply_text:
+            return await call.message.edit_text("❌ Session expire ho gaya. Kripya naya command bhejein.")
+            
+        await settings_col.update_one({"chat_id": str(call.message.chat.id)}, {"$set": {f"filters.{keyword}": reply_text}}, upsert=True)
+        await state.clear()
+        await call.message.edit_text(f"✅ Approval Done! Filter <b>{keyword}</b> successfully UPDATE ho gaya!")
 
 @dp.message(Command("delfilter"))
 async def cmd_delfilter(msg: types.Message):
     if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
     args = msg.text.split(maxsplit=1)
     if len(args) < 2: return
-    
-    keyword = args[1].lower()
-    
-    # Safe delete (Atomic Unset)
-    await settings_col.update_one(
-        {"chat_id": str(msg.chat.id)},
-        {"$unset": {f"filters.{keyword}": ""}}
-    )
-    await msg.reply(f"🗑️ Filter for <b>{keyword}</b> deleted.")
+    await settings_col.update_one({"chat_id": str(msg.chat.id)}, {"$unset": {f"filters.{args[1].lower()}": ""}})
+    await msg.reply(f"🗑️ Filter for <b>{args[1]}</b> deleted.")
 
 @dp.message(Command("delallfilters"))
 async def cmd_delallfilters(msg: types.Message):
     if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
-    
-    # Reset all filters safely
-    await settings_col.update_one(
-        {"chat_id": str(msg.chat.id)},
-        {"$set": {"filters": {}}}
-    )
+    await settings_col.update_one({"chat_id": str(msg.chat.id)}, {"$set": {"filters": {}}})
     await msg.reply("🗑️ ✅ All active filters deleted.")
 
 @dp.message(Command("filters"))
@@ -214,8 +218,7 @@ async def cmd_filters(msg: types.Message):
     if chat_data.get('filters'):
         active_filters = "\n".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
         await msg.reply(f"📋 <b>Active Filters:</b>\n{active_filters}")
-    else:
-        await msg.reply("No active filters in this group.")
+    else: await msg.reply("No active filters in this group.")
 
 # --- AUTO APPROVE & LEFT MSG ---
 @dp.chat_join_request()
@@ -223,86 +226,13 @@ async def auto_approve_join_request(update: types.ChatJoinRequest):
     user_id, chat_id = update.from_user.id, str(update.chat.id)
     chat_data = await get_chat_data(chat_id)
     welcome_msg = chat_data.get('welcome_msg')
-    
     if welcome_msg and welcome_msg != "OFF":
         try: await bot.send_message(chat_id=user_id, text=welcome_msg)
-        except Exception: pass 
+        except: pass 
     try: await update.approve()
     except Exception as e: logging.error(f"Failed to approve: {e}")
 
 @dp.chat_member()
 async def on_chat_member_update(update: types.ChatMemberUpdated):
     user, chat_id = update.from_user, str(update.chat.id)
-    if update.old_chat_member.status in ['member', 'administrator'] and update.new_chat_member.status in ['left', 'kicked']:
-        chat_data = await get_chat_data(chat_id)
-        default_left = "🌟 ALL DRAMA DIRECT FILES AVAILABLE 🗃️\n\nhttps://t.me/+amS1Q3R4_Qg5NjU1\nhttps://t.me/+amS1Q3R4_Qg5NjU1"
-        final_msg = chat_data.get('left_msg') or default_left
-        if final_msg != "OFF":
-            try: await bot.send_message(chat_id=user.id, text=final_msg)
-            except Exception: pass
-
-# --- FILTER LISTENER (BIG RANDOM EMOJI & BOLD TEXT) ---
-@dp.message(F.text)
-async def filter_handler(msg: types.Message):
-    if msg.chat.type == 'private' or msg.text.startswith('/'): return
-    chat_data = await get_chat_data(str(msg.chat.id))
-    
-    for kw, reply in chat_data.get('filters', {}).items():
-        if kw in msg.text.lower():
-            
-            # Har baar ek naya random emoji
-            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
-            random_emoji = random.choice(emoji_list)
-            
-            try:
-                # is_big=True for big screen animation pop-up
-                await msg.react([types.ReactionTypeEmoji(emoji=random_emoji)], is_big=True)
-            except Exception:
-                pass 
-            
-            # Bold Reply text banaya gaya
-            bold_reply = f"<b>{reply}</b>"
-            sent = await msg.reply(bold_reply, link_preview_options=types.LinkPreviewOptions(is_disabled=True))
-            
-            # Safe cleanup update
-            chat_data['cleanup'].append({
-                'chat_id': sent.chat.id, 'message_id': sent.message_id,
-                'delete_at': time.time() + 3600
-            })
-            await update_chat_data(str(msg.chat.id), {"cleanup": chat_data['cleanup']})
-            break
-
-# --- BACKGROUND CLEANUP ---
-async def cleanup_background_task():
-    while True:
-        await asyncio.sleep(60)
-        async for chat in settings_col.find({"cleanup": {"$not": {"$size": 0}}}):
-            current_time = time.time()
-            valid_msgs = []
-            for item in chat.get('cleanup', []):
-                if current_time >= item['delete_at']:
-                    try: await bot.delete_message(chat_id=item['chat_id'], message_id=item['message_id'])
-                    except: pass
-                else: valid_msgs.append(item)
-            await update_chat_data(chat['chat_id'], {"cleanup": valid_msgs})
-
-# --- RENDER DUMMY WEB SERVER ---
-async def handle_ping(request): 
-    return web.Response(text="Bot is running smoothly on Render!")
-
-async def start_dummy_server():
-    app = web.Application()
-    app.router.add_get('/', handle_ping)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
-    await site.start()
-
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True) 
-    await start_dummy_server()
-    asyncio.create_task(cleanup_background_task())
-    await dp.start_polling(bot)
-
-if __name__ == '__main__':
-    asyncio.run(main())
+    if update.old_chat_member.status in ['member', 'administrator'] and update.
