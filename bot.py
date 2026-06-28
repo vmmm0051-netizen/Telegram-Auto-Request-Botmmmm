@@ -145,8 +145,9 @@ async def private_state_manager(client: Client, msg: Message):
 
     elif state == "waiting_for_last":
         msg_id = None
-        if msg.forward_origin and msg.forward_origin.type == 'channel':
-            msg_id = msg.forward_origin.message_id
+        # 👇 Ye fix kiya gaya hai! (forward_origin ko forward_from_chat kiya)
+        if msg.forward_from_chat and msg.forward_from_chat.type == enums.ChatType.CHANNEL:
+            msg_id = msg.forward_from_message_id
         elif msg.text and "t.me" in msg.text:
             match = LINK_REGEX.search(msg.text)
             if match: msg_id = int(match.group(2))
