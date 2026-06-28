@@ -2,3 +2,5 @@ aiogram==3.7.0
 python-dotenv==1.0.1
 motor
 aiohttp
+pyrogram
+tgcrypto
