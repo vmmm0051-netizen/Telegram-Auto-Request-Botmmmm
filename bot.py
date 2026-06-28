@@ -196,35 +196,47 @@ async def cmd_start(client: Client, msg: Message):
                 [InlineKeyboardButton("📌 JOIN UPDATE CHANNEL 📌", url=UPDATE_CHANNEL_LINK)]
             ])
             
-            for m_id in range(first_id, last_id + 1):
+                        for m_id in range(first_id, last_id + 1):
                 try:
                     tg_msg = await client.get_messages(chat_id, m_id)
                     if tg_msg.empty: continue
                     
-                    file_name = "🎬 Movie/Series File"
-                    if tg_msg.document: file_name = tg_msg.document.file_name
-                    elif tg_msg.video: file_name = tg_msg.video.file_name
-                    elif tg_msg.audio: file_name = tg_msg.audio.file_name
-                    
-                    # 🔥 CAPTION MEIN ALAG LINK AUR POWERED BY BINA LINK KE 🔥
-                    vip_caption = (
-                        f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>\n\n"
-                        f"<b>⚜️ Powered By : @ASKORENDRAMA</b>"
-                    )
-                    
-                    await client.copy_message(
-                        chat_id=msg.chat.id,
-                        from_chat_id=chat_id,
-                        message_id=m_id,
-                        caption=vip_caption,
-                        reply_markup=vip_button
-                    )
+                    # 👇 YAHAN CHECK KAREGA KI MESSAGE VIDEO/FILE HAI YA NAHI
+                    if tg_msg.document or tg_msg.video or tg_msg.audio:
+                        file_name = "🎬 Movie/Series File"
+                        if tg_msg.document and tg_msg.document.file_name: 
+                            file_name = tg_msg.document.file_name
+                        elif tg_msg.video and tg_msg.video.file_name: 
+                            file_name = tg_msg.video.file_name
+                        elif tg_msg.audio and tg_msg.audio.file_name: 
+                            file_name = tg_msg.audio.file_name
+                        
+                        # 🔥 VIP NEELA CAPTION 🔥
+                        vip_caption = (
+                            f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>\n\n"
+                            f"<b>⚜️ Powered By : @ASKORENDRAMA</b>"
+                        )
+                        
+                        await client.copy_message(
+                            chat_id=msg.chat.id,
+                            from_chat_id=chat_id,
+                            message_id=m_id,
+                            caption=vip_caption,
+                            reply_markup=vip_button
+                        )
+                    else:
+                        # 👇 AGAR STICKER YA TEXT HAI TO BINA BUTTON KE NORMAL BHEJEGA
+                        await client.copy_message(
+                            chat_id=msg.chat.id,
+                            from_chat_id=chat_id,
+                            message_id=m_id
+                        )
+                        
                     await asyncio.sleep(0.5)
                 except FloodWait as e:
                     await asyncio.sleep(e.value)
                 except Exception:
                     pass
-            return await wait_msg.delete()
             
     # DEFAULT START RESPONSE
     me = await client.get_me()
