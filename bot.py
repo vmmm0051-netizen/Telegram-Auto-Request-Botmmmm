@@ -23,9 +23,8 @@ API_HASH = os.getenv('API_HASH', '')
 PORT = int(os.environ.get("PORT", 10000))
 
 # ⚠️ YAHAN APNA MAIN CHANNEL LINK AUR BOT USERNAME DAALEIN
-CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"
-BUTTON_LINK = "https://t.me/backupchannel0707"
-BOT_USERNAME = "KDL143BOT" 
+CHANNEL_LINK = "https://t.me/YOUR_CHANNEL_USERNAME"
+BOT_USERNAME = "YOUR_BOT_USERNAME" 
 
 # Initialize Client
 bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
@@ -191,7 +190,7 @@ async def cmd_start(client: Client, msg: Message):
             except ValueError: pass
 
             wait_msg = await msg.reply_text("⏳ <i>Sending your files, please wait...</i>")
-            vip_button = InlineKeyboardMarkup([[InlineKeyboardButton("📌 JOIN UPDATES CHANNEL 📌", url=BUTTON_LINK)]])
+            vip_button = InlineKeyboardMarkup([[InlineKeyboardButton("📌 JOIN UPDATES CHANNEL 📌", url=CHANNEL_LINK)]])
             
             for m_id in range(first_id, last_id + 1):
                 try:
@@ -204,14 +203,16 @@ async def cmd_start(client: Client, msg: Message):
                     elif tg_msg.audio: file_name = tg_msg.audio.file_name
                     
                     vip_caption = (
-    f"<b><a href='{CAPTION_LINK}'>{file_name}</a></b>\n\n"
-    f"<b>⚜️ Powered By : @ASKOREANDRAMA</b>"
+                        f"<b><a href='{CHANNEL_LINK}'>{file_name}</a></b>\n\n"
+                        f"<b>⚜️ Powered By : <a href='{CHANNEL_LINK}'>[ iP Update ]</a></b>"
                     )
                     
                     await client.copy_message(
-    chat_id=msg.chat.id,
-    from_chat_id=chat_id,
-    message_id=m_id
+                        chat_id=msg.chat.id,
+                        from_chat_id=chat_id,
+                        message_id=m_id,
+                        caption=vip_caption,
+                        reply_markup=vip_button
                     )
                     await asyncio.sleep(0.5)
                 except FloodWait as e:
