@@ -209,11 +209,9 @@ async def cmd_start(client: Client, msg: Message):
                     )
                     
                     await client.copy_message(
-                        chat_id=msg.chat.id,
-                        from_chat_id=chat_id,
-                        message_id=m_id,
-                        caption=vip_caption,
-                        reply_markup=vip_button
+    chat_id=msg.chat.id,
+    from_chat_id=chat_id,
+    message_id=m_id
                     )
                     await asyncio.sleep(0.5)
                 except FloodWait as e:
