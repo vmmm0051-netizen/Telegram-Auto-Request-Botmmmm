@@ -10,26 +10,24 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters, idle, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery, ChatJoinRequest, ChatMemberUpdated
-from pyrogram.errors import FloodWait, MessageNotModified
+from pyrogram.errors import FloodWait
 
 # --- LOGGING & CONFIG ---
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
-API_ID = int(os.getenv('API_ID', 0))      # Tor Telegram API ID (.env te thakte hobe)
-API_HASH = os.getenv('API_HASH', '')    # Tor Telegram API Hash (.env te thakte hobe)
+API_ID = os.getenv('API_ID', '0')      
+API_HASH = os.getenv('API_HASH', '')    
 PORT = int(os.environ.get("PORT", 10000))
 
 # ⚠️ YAHAN APNA MAIN CHANNEL LINK AUR BOT USERNAME DAALEIN
 CHANNEL_LINK = "https://t.me/YOUR_CHANNEL_USERNAME"
-BOT_USERNAME = "YOUR_BOT_USERNAME" # Bot er username bina @ chara
+BOT_USERNAME = "YOUR_BOT_USERNAME" 
 
-if not BOT_TOKEN or not MONGO_URI or not API_ID or not API_HASH:
-    raise RuntimeError('⚠️ BOT_TOKEN, MONGO_URI, API_ID, or API_HASH not set!')
-
-bot = Client("filter_batch_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
+# Initialize Client
+bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
 
 # --- MONGODB SETUP ---
 client = AsyncIOMotorClient(MONGO_URI)
@@ -99,7 +97,6 @@ async def private_state_manager(client: Client, msg: Message):
 
     state = state_data["state"]
 
-    # WELCOME / LEFT CONFIG STATES
     if state == "waiting_for_forward":
         if not msg.forward_from_chat or msg.forward_from_chat.type != enums.ChatType.CHANNEL:
             return await msg.reply_text("❌ This is not a forwarded message from a channel.")
@@ -128,7 +125,6 @@ async def private_state_manager(client: Client, msg: Message):
         await msg.reply_text(f"✅ Message successfully set:\n\n{msg.text}")
         user_states.pop(user_id, None)
 
-    # BATCH GENERATOR STATES
     elif state == "waiting_for_first":
         msg_id, chat_id = None, None
         if msg.forward_from_chat and msg.forward_from_chat.type == enums.ChatType.CHANNEL:
@@ -197,7 +193,6 @@ async def cmd_start(client: Client, msg: Message):
             
             for m_id in range(first_id, last_id + 1):
                 try:
-                    # Pyrogram e direct file name check kora jay natively! 😎
                     tg_msg = await client.get_messages(chat_id, m_id)
                     if tg_msg.empty: continue
                     
@@ -206,7 +201,6 @@ async def cmd_start(client: Client, msg: Message):
                     elif tg_msg.video: file_name = tg_msg.video.file_name
                     elif tg_msg.audio: file_name = tg_msg.audio.file_name
                     
-                    # 🔥 EXACT VIP NEELA CAPTION 🔥
                     vip_caption = (
                         f"<b><a href='{CHANNEL_LINK}'>{file_name}</a></b>\n\n"
                         f"<b>⚜️ Powered By : <a href='{CHANNEL_LINK}'>[ iP Update ]</a></b>"
@@ -283,8 +277,6 @@ async def cb_handlers(client: Client, call: CallbackQuery):
         ])
         try: await call.message.edit_caption(caption=caption, reply_markup=kb)
         except: pass
-
-    # FILTER OVERWRITE APPROVAL SYSTEM
     elif call.data.startswith("filter_update_"):
         if not await is_admin(client, call.message):
             return await call.answer("❌ Sirf Admin hi approve kar sakte hain!", show_alert=True)
@@ -373,4 +365,72 @@ async def on_chat_member_update(client: Client, update: ChatMemberUpdated):
         user = update.new_chat_member.user
         chat_id = str(update.chat.id)
         chat_data = await get_chat_data(chat_id)
-        final_msg = chat_data.get('left_msg')
+        final_msg = chat_data.get('left_msg') 
+        
+        if final_msg and final_msg != "OFF":
+            try: await client.send_message(chat_id=user.id, text=final_msg)
+            except: pass
+
+# --- ACTIVE GROUP CHAT LISTENER (FILTERS + REACTION) ---
+@bot.on_message(filters.group & filters.text & ~filters.command([]))
+async def group_filter_handler(client: Client, msg: Message):
+    if msg.text.startswith('/'): return
+    chat_id = str(msg.chat.id)
+    chat_data = await get_chat_data(chat_id)
+    
+    for kw, reply in chat_data.get('filters', {}).items():
+        pattern = r'\b' + re.escape(kw.lower()) + r'\b'
+        if re.search(pattern, msg.text.lower()):
+            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
+            try: await msg.react(random.choice(emoji_list))
+            except: pass
+            
+            sent = await msg.reply_text(f"<b>{reply}</b>", disable_web_page_preview=True)
+            new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
+            await update_chat_data(chat_id, {"cleanup": new_cleanup})
+            return 
+
+# --- BACKGROUND AUTO-EDIT TASK ---
+async def cleanup_task():
+    while True:
+        await asyncio.sleep(60)
+        async for chat in settings_col.find({"cleanup": {"$not": {"$size": 0}}}):
+            valid = []
+            for item in chat.get('cleanup', []):
+                if time.time() >= item['delete_at']:
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=item['chat_id'], 
+                            message_id=item['message_id'],
+                            text="<b>💖 ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴛʜᴇ ᴛɪᴛʟᴇ, ᴀɴᴅ ɪ'ʟʟ ɢᴇᴛ ɪᴛ ꜰᴏʀ ʏᴏᴜ ɪɴꜱᴛᴀɴᴛʟʏ! 👇</b>"
+                        )
+                    except: pass
+                else: valid.append(item)
+            await update_chat_data(chat['chat_id'], {"cleanup": valid})
+
+# --- RENDER WEB ALIVE SERVER ---
+async def handle_ping(request): return web.Response(text="Pyrogram Filter Bot Active!")
+async def start_dummy_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, '0.0.0.0', PORT).start()
+
+# --- MAIN ENGINE RUN ---
+async def start_bot():
+    if not BOT_TOKEN or not MONGO_URI or API_ID == '0' or not API_HASH:
+        logging.error("❌ CRASH PREVENTED: Please add API_ID, API_HASH, BOT_TOKEN, and MONGO_URI in Render Environment Variables!")
+        return
+        
+    await start_dummy_server()
+    asyncio.create_task(cleanup_task())
+    
+    await bot.start()
+    logging.info("🚀 Pyrogram VIP Bot is Now Online & Running Perfectly!")
+    await idle()
+    await bot.stop()
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(start_bot())
