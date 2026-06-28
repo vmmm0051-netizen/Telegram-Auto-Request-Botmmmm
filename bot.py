@@ -22,9 +22,10 @@ API_ID = os.getenv('API_ID', '0')
 API_HASH = os.getenv('API_HASH', '')    
 PORT = int(os.environ.get("PORT", 10000))
 
-# ⚠️ YAHAN APNA MAIN CHANNEL LINK AUR BOT USERNAME DAALEIN
-CHANNEL_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"
-BOT_USERNAME = "KDL143BOT" 
+# ⚠️ YAHAN APNE ALAG-ALAG LINKS AUR BOT USERNAME DAALEIN
+FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       # Jo file ke naam ke andar link chahiye
+UPDATE_CHANNEL_LINK = "https://t.me/K_CDRAMAUPDATES"   # Jo niche Button ke andar link chahiye
+BOT_USERNAME = "KDL143BOT"                              # Bot ka username bina @ ke
 
 # Initialize Client
 bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
@@ -145,7 +146,6 @@ async def private_state_manager(client: Client, msg: Message):
 
     elif state == "waiting_for_last":
         msg_id = None
-        # 👇 Ye fix kiya gaya hai! (forward_origin ko forward_from_chat kiya)
         if msg.forward_from_chat and msg.forward_from_chat.type == enums.ChatType.CHANNEL:
             msg_id = msg.forward_from_message_id
         elif msg.text and "t.me" in msg.text:
@@ -190,7 +190,11 @@ async def cmd_start(client: Client, msg: Message):
             except ValueError: pass
 
             wait_msg = await msg.reply_text("⏳ <i>Sending your files, please wait...</i>")
-            vip_button = InlineKeyboardMarkup([[InlineKeyboardButton("📌 JOIN UPDATES CHANNEL 📌", url=CHANNEL_LINK)]])
+            
+            # 🔥 1 BUTTON SATH ALAG LINK 🔥
+            vip_button = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📌 JOIN UPDATE CHANNEL 📌", url=UPDATE_CHANNEL_LINK)]
+            ])
             
             for m_id in range(first_id, last_id + 1):
                 try:
@@ -202,9 +206,10 @@ async def cmd_start(client: Client, msg: Message):
                     elif tg_msg.video: file_name = tg_msg.video.file_name
                     elif tg_msg.audio: file_name = tg_msg.audio.file_name
                     
+                    # 🔥 CAPTION MEIN ALAG LINK AUR POWERED BY BINA LINK KE 🔥
                     vip_caption = (
-                        f"<b><a href='{CHANNEL_LINK}'>{file_name}</a></b>\n\n"
-                        f"<b>⚜️ Powered By : <a href='{CHANNEL_LINK}'>[ iP Update ]</a></b>"
+                        f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>\n\n"
+                        f"<b>⚜️ Powered By : @ASKORENDRAMA</b>"
                     )
                     
                     await client.copy_message(
@@ -271,7 +276,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
         me = await client.get_me()
         caption = f"🚩 <b>JAI SHRI RAM</b> 🚩\n\n<b>HEY {call.from_user.first_name.upper()}</b>, <b>{get_greeting()}</b>\n\n🤖 <b>ɪ ᴀᴍ {me.first_name.upper()}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton('🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
+            [InlineKeyboardButton('🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏoup 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
             [InlineKeyboardButton('ʜᴇʟᴘ 📢', callback_data='help_menu'), InlineKeyboardButton('ᴀʙᴏᴜᴛ 📖', callback_data='about_menu')],
             [InlineKeyboardButton('ᴛᴏᴘ ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'), InlineKeyboardButton('... 🎟️', callback_data='upgrade_menu')],
             [InlineKeyboardButton('➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ ➕', url=f'https://t.me/{me.username}?startchannel=start')]
