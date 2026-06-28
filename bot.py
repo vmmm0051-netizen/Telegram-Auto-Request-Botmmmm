@@ -110,7 +110,7 @@ async def cb_help(call: CallbackQuery):
         "• <b>Auto-Approve:</b> Channel requests approved instantly.\n"
         "• <b>Exact Match:</b> Strict word boundary filter triggers.\n"
         "• <b>Big Emoji Reaction:</b> Pop-up animations on triggers.\n"
-        "• <b>Auto-Edit:</b> Filter replies edit after 1 hour."
+        "• <b>Auto-Edit:</b> Filter replies edit after 24 hours."
     )
     back_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
     try: await call.message.edit_caption(caption=help_text, reply_markup=back_kb)
@@ -125,7 +125,7 @@ async def cb_about(call: CallbackQuery):
         f"<b>• ʟᴀɴɢᴜᴀɢᴇ:</b> Python 3\n"
         f"<b>• ꜰʀᴀᴍᴇᴡᴏʀᴋ:</b> Aiogram 3.x\n"
         f"<b>• ᴅᴀᴛᴀʙᴀꜱᴇ:</b> MongoDB\n\n"
-        f"<i>This bot provides powerful auto-request approval, dynamic EXACT keyword filtering with overwrite protection, and 1-hour auto-edit features for Telegram Groups & Channels.</i>"
+        f"<i>This bot provides powerful auto-request approval, dynamic EXACT keyword filtering with overwrite protection, and 24-hour auto-edit features for Telegram Groups & Channels.</i>"
     )
     back_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
     try: await call.message.edit_caption(caption=about_text, reply_markup=back_kb)
@@ -155,7 +155,7 @@ async def cb_start(call: CallbackQuery):
         [InlineKeyboardButton(text='🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
         [InlineKeyboardButton(text='ʜᴇʟᴘ 📢', callback_data='help_menu'),
          InlineKeyboardButton(text='ᴀʙᴏᴜᴛ 📖', callback_data='about_menu')],
-        [InlineKeyboardButton(text='ᴛᴏ top ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'),
+        [InlineKeyboardButton(text='ᴛᴏᴘ ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'),
          InlineKeyboardButton(text='ᴜᴘɢʀᴀᴅᴇ 🎟️', callback_data='upgrade_menu')],
         [InlineKeyboardButton(text='➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ ➕', url=f'https://t.me/{me.username}?startchannel=start')]
     ])
@@ -227,30 +227,37 @@ async def cmd_cancel(msg: types.Message, state: FSMContext):
     await state.clear()
     await msg.answer("❌ Process cancelled.")
 
-# --- GROUP FILTERS (WITH ADMIN OVERWRITE APPROVAL) ---
+# --- GROUP FILTERS (WITH ADMIN OVERWRITE APPROVAL - DB FIX) ---
 @dp.message(Command("addfilter"))
-async def cmd_addfilter(msg: types.Message, state: FSMContext):
+async def cmd_addfilter(msg: types.Message):
     if msg.chat.type in ['private', 'channel'] or not await is_admin(msg): return
     args = msg.text.split(maxsplit=2)
     if len(args) < 3: return await msg.reply("❌ Format: /addfilter keyword reply")
     
     keyword, reply_text = args[1].lower(), args[2]
-    chat_data = await get_chat_data(str(msg.chat.id))
+    chat_id = str(msg.chat.id)
+    chat_data = await get_chat_data(chat_id)
     is_update = keyword in chat_data.get('filters', {})
     
     if is_update:
-        await state.update_data(pending_keyword=keyword, pending_reply=reply_text)
+        # 👇 FIX: FSM Context ki jagah Data seedha MongoDB mein temporary save kar rahe hain
+        await settings_col.update_one(
+            {"chat_id": chat_id}, 
+            {"$set": {"pending_filter": {"keyword": keyword, "reply_text": reply_text}}},
+            upsert=True
+        )
+        
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✅ Yes, Update", callback_data="filter_update_yes"),
              InlineKeyboardButton(text="❌ No, Cancel", callback_data="filter_update_no")]
         ])
         await msg.reply(f"⚠️ <b>Wait!</b> '<code>{keyword}</code>' ka filter pehle se mojood hai.\n\nKya aap ise naye message ke sath <b>OVERWRITE</b> karne ki permission dete hain?", reply_markup=kb)
     else:
-        await settings_col.update_one({"chat_id": str(msg.chat.id)}, {"$set": {f"filters.{keyword}": reply_text}}, upsert=True)
+        await settings_col.update_one({"chat_id": chat_id}, {"$set": {f"filters.{keyword}": reply_text}}, upsert=True)
         await msg.reply(f"✅ Naya Filter <b>{keyword}</b> successfully add ho gaya!")
 
 @dp.callback_query(F.data.startswith("filter_update_"))
-async def process_filter_update(call: CallbackQuery, state: FSMContext):
+async def process_filter_update(call: CallbackQuery):
     try:
         member = await bot.get_chat_member(call.message.chat.id, call.from_user.id)
         if member.status not in ['administrator', 'creator']:
@@ -258,18 +265,30 @@ async def process_filter_update(call: CallbackQuery, state: FSMContext):
     except: return await call.answer("❌ Error verifying admin.", show_alert=True)
 
     action = call.data.split("_")[-1]
+    chat_id = str(call.message.chat.id)
+    
+    # 👇 FIX: Data MongoDB se read kar rahe hain
+    chat_data = await get_chat_data(chat_id)
+    pending = chat_data.get("pending_filter")
+    
+    if not pending:
+        return await call.message.edit_text("❌ Session expire ho gaya ya filter pehle hi update ho chuka hai. Kripya naya command bhejein.")
+        
     if action == "no":
-        await state.clear()
+        await settings_col.update_one({"chat_id": chat_id}, {"$unset": {"pending_filter": ""}})
         return await call.message.edit_text("❌ Update cancel kar diya gaya hai. Purana filter safe hai.")
         
     if action == "yes":
-        data = await state.get_data()
-        keyword, reply_text = data.get("pending_keyword"), data.get("pending_reply")
-        if not keyword or not reply_text:
-            return await call.message.edit_text("❌ Session expire ho gaya. Kripya naya command bhejein.")
-            
-        await settings_col.update_one({"chat_id": str(call.message.chat.id)}, {"$set": {f"filters.{keyword}": reply_text}}, upsert=True)
-        await state.clear()
+        keyword, reply_text = pending.get("keyword"), pending.get("reply_text")
+        
+        # Filter update karo aur temporary data ko delete kar do
+        await settings_col.update_one(
+            {"chat_id": chat_id}, 
+            {
+                "$set": {f"filters.{keyword}": reply_text},
+                "$unset": {"pending_filter": ""}
+            }
+        )
         await call.message.edit_text(f"✅ Approval Done! Filter <b>{keyword}</b> successfully UPDATE ho gaya!")
 
 @dp.message(Command("delfilter"))
@@ -313,11 +332,9 @@ async def on_chat_member_update(update: types.ChatMemberUpdated):
     if (update.old_chat_member.status in ['member', 'administrator'] and 
         update.new_chat_member.status in ['left', 'kicked']):
         
-        # 👇 DEFAULT MSG COMPLETELY DELETED
         chat_data = await get_chat_data(chat_id)
         final_msg = chat_data.get('left_msg') 
         
-        # Sirf tabhi DM bhejega agar admin ne manually set kiya ho
         if final_msg and final_msg != "OFF":
             try: await bot.send_message(chat_id=user.id, text=final_msg)
             except: pass
@@ -343,6 +360,7 @@ async def filter_handler(msg: types.Message):
                 new_cleanup = chat_data.get('cleanup', []) + [{
                     "chat_id": sent.chat.id, 
                     "message_id": sent.message_id, 
+                    # 👇 Time wapas 86400 (24 Ghante) kar diya gaya hai
                     "delete_at": time.time() + 86400
                 }]
                 await update_chat_data(str(msg.chat.id), {"cleanup": new_cleanup})
