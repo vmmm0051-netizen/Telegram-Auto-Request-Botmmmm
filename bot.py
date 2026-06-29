@@ -463,7 +463,23 @@ async def on_chat_member_update(client: Client, update: ChatMemberUpdated):
             try: await client.send_message(chat_id=user.id, text=final_msg)
             except: pass
 
-# --- ACTIVE GROUP CHAT LISTENER (FILTERS + REACTION) ---
+import aiohttp
+
+# --- DIRECT REACTION BYPASS FUNCTION ---
+async def send_reaction_direct(chat_id, message_id, emoji):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "reaction": [{"type": "emoji", "emoji": emoji}]
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.post(url, json=payload)
+    except:
+        pass
+
+# --- GROUP CHAT LISTENER (FILTERS + REACTION BYPASS) ---
 @bot.on_message(filters.group & filters.text & ~filters.command([]))
 async def group_filter_handler(client: Client, msg: Message):
     if msg.text.startswith('/'): return
@@ -473,21 +489,18 @@ async def group_filter_handler(client: Client, msg: Message):
     for kw, reply in chat_data.get('filters', {}).items():
         pattern = r'\b' + re.escape(kw.lower()) + r'\b'
         if re.search(pattern, msg.text.lower()):
-            # 1. Pehle Reaction Dega (Naya Sahi Syntax)
-            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
-            try: 
-                await client.send_reaction(chat_id=msg.chat.id, message_id=msg.id, emoji=random.choice(emoji_list))
-            except Exception as e: 
-                logging.error(f"Reaction Error: {e}")
-                pass
             
-            # 2. Phir Link Bhejega
+            # 1. Direct Bypass Hack Se Reaction Bhejna
+            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
+            await send_reaction_direct(msg.chat.id, msg.id, random.choice(emoji_list))
+            
+            # 2. Movie ka Link Bhejna
             sent = await msg.reply_text(f"<b>{reply}</b>", disable_web_page_preview=True)
             
             # 3. 24 Ghante baad Auto-Edit ki list mein add karega
             new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
-            return 
+            return
             
 
 # --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
