@@ -26,7 +26,7 @@ PORT = int(os.environ.get("PORT", 10000))
 # ⚠️ LINKS AUR BOT USERNAME
 FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
 UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
-BOT_USERNAME = "Channelpsotsearchbot" 
+BOT_USERNAME = "KDL143bot" 
 
 # ⚠️ FORCE SUB CHANNELS (Yahan apne channels daalein)
 FSUB_CHANNEL_1 = -1000000000000  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
@@ -41,7 +41,7 @@ bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_toke
 client = AsyncIOMotorClient(MONGO_URI)
 db = client.bot_database
 settings_col = db.chat_settings
-autofilter_col = db.autofilter_data  # Auto-Index Search Data Collection
+autofilter_col = db.autofilter_data  
 
 # --- BATCH SYSTEM HELPERS ---
 LINK_REGEX = re.compile(r'https://t\.me/(?:c/)?(.*)/(\d+)')
@@ -135,12 +135,7 @@ async def cmd_cancel(client: Client, msg: Message):
 async def cmd_set_time(client: Client, msg: Message):
     args = msg.text.split()
     if len(args) < 2:
-        return await msg.reply_text("❌ <b>Format:</b> <code>/settime <seconds></code>
-
-<b>Example:</b>
-• <code>/settime 60</code> (1 Minute)
-• <code>/settime 600</code> (10 Minutes)
-• <code>/settime 3600</code> (1 Hour)")
+        return await msg.reply_text("❌ <b>Format:</b> <code>/settime <seconds></code>\n\n<b>Example:</b>\n• <code>/settime 60</code> (1 Minute)\n• <code>/settime 600</code> (10 Minutes)\n• <code>/settime 3600</code> (1 Hour)")
     
     try:
         seconds = int(args[1])
@@ -157,8 +152,7 @@ async def cmd_set_time(client: Client, msg: Message):
         if seconds >= 60:
             time_text = f"{seconds // 60} minutes"
             
-        await msg.reply_text(f"✅ <b>Batch Delete Time successfully update ho gaya hai!</b>
-Ab se /batch link ki saari files <b>{time_text}</b> ke baad automatically delete ho jayengi.")
+        await msg.reply_text(f"✅ <b>Batch Delete Time successfully update ho gaya hai!</b>\nAb se /batch link ki saari files <b>{time_text}</b> ke baad automatically delete ho jayengi.")
     except ValueError:
         await msg.reply_text("❌ Kripya ek valid number daalein (sirf digits/numbers)!")
 
@@ -193,16 +187,12 @@ async def private_state_manager(client: Client, msg: Message):
             return user_states.pop(user_id, None)
 
         state_data.update({"state": "waiting_for_text", "channel_id": channel_id, "channel_title": channel_title})
-        await msg.reply_text(f"✅ Channel verified: <b>{channel_title}</b>
-
-📝 Now, type and send your new custom Message.")
+        await msg.reply_text(f"✅ Channel verified: <b>{channel_title}</b>\n\n📝 Now, type and send your new custom Message.")
 
     elif state == "waiting_for_text":
         if not msg.text: return await msg.reply_text("❌ Please send text only.")
         await update_chat_data(state_data['channel_id'], {state_data['msg_type']: msg.text})
-        await msg.reply_text(f"✅ Message successfully set:
-
-{msg.text}")
+        await msg.reply_text(f"✅ Message successfully set:\n\n{msg.text}")
         user_states.pop(user_id, None)
 
     elif state == "waiting_for_first":
@@ -239,9 +229,7 @@ async def private_state_manager(client: Client, msg: Message):
 
         token = encode_id(chat_id, first_id, last_id)
         batch_link = f"https://t.me/{BOT_USERNAME}?start=batch_{token}"
-        await msg.reply_text(f"✅ <b>Here is your Batch Link:</b>
-
-<code>{batch_link}</code>")
+        await msg.reply_text(f"✅ <b>Here is your Batch Link:</b>\n\n<code>{batch_link}</code>")
         user_states.pop(user_id, None)
 
 # --- CHANNEL DM SETUP MANAGEMENT ---
@@ -268,9 +256,7 @@ async def cmd_start(client: Client, msg: Message):
         missing_channels = await get_missing_channels(client, msg.from_user.id)
         if missing_channels:
             user_link = f"<a href='tg://user?id={msg.from_user.id}'>{msg.from_user.first_name}</a>"
-            fsub_text = f"<i>Hey {user_link}
-
-Please Join My Update Channel(s) To Use Me!</i>"
+            fsub_text = f"<i>Hey {user_link}\n\nPlease Join My Update Channel(s) To Use Me!</i>"
             
             fsub_buttons = []
             for ch in missing_channels:
@@ -312,9 +298,7 @@ Please Join My Update Channel(s) To Use Me!</i>"
                             file_name = tg_msg.audio.file_name
                         
                         vip_caption = (
-                            f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>
-
-"
+                            f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>\n\n"
                             f"<b>⚜️ Powered By : @ASKORENDRAMA</b>"
                         )
                         
@@ -348,9 +332,7 @@ Please Join My Update Channel(s) To Use Me!</i>"
                     time_text = f"{delete_delay // 60} minutes"
                 
                 alert_text = (
-                    "⚠️ <u><b>Important:</b></u>
-
-"
+                    "⚠️ <u><b>Important:</b></u>\n\n"
                     f"<i>All Messages will be deleted after <b>{time_text}</b>. Please save or forward these "
                     "messages to your <b>personal saved messages</b> to avoid losing them!</i>"
                 )
@@ -385,12 +367,8 @@ Please Join My Update Channel(s) To Use Me!</i>"
     bot_name = me.first_name.upper() if me.first_name else "BOT"
     
     caption = (
-        f"🚩 <b>JAI SHRI RAM</b> 🚩
-
-"
-        f"<b>HEY {user_name}</b>, <b>{greeting}</b>
-
-"
+        f"🚩 <b>JAI SHRI RAM</b> 🚩\n\n"
+        f"<b>HEY {user_name}</b>, <b>{greeting}</b>\n\n"
         f"🤖 <b>ɪ ᴀᴍ {bot_name}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
     )
     kb = InlineKeyboardMarkup([
@@ -408,26 +386,10 @@ Please Join My Update Channel(s) To Use Me!</i>"
 async def cb_handlers(client: Client, call: CallbackQuery):
     if call.data == "help_menu":
         help_text = (
-            "📖 <b>Full Command & Feature Guide:</b>
-
-"
-            "📢 <b>1. Channel DMs (Welcome/Goodbye):</b>
-• <code>/setwelcome</code> & <code>/setleft</code>
-• <code>/offwelcome</code> & <code>/offleft</code>
-
-"
-            "🗃️ <b>2. Group Filters Management:</b>
-• <code>/addfilter [keyword] | [reply link]</code>
-• <code>/delfilter [keyword]</code>
-• <code>/delallfilters</code>
-• <code>/filters</code>
-
-"
-            "⚡ <b>3. Premium Features (Auto-Active):</b>
-• <b>Auto-Approve:</b> Channel requests approved instantly.
-• <b>Exact Match:</b> Strict word boundary filter triggers.
-• <b>Big Emoji Reaction:</b> Pop-up animations on triggers.
-• <b>Auto-Edit:</b> Filter replies edit after 24 hours."
+            "📖 <b>Full Command & Feature Guide:</b>\n\n"
+            "📢 <b>1. Channel DMs (Welcome/Goodbye):</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n"
+            "🗃️ <b>2. Group Filters Management:</b>\n• <code>/addfilter [keyword] | [reply link]</code>\n• <code>/delfilter [keyword]</code>\n• <code>/delallfilters</code>\n• <code>/filters</code>\n\n"
+            "⚡ <b>3. Premium Features (Auto-Active):</b>\n• <b>Auto-Approve:</b> Channel requests approved instantly.\n• <b>Exact Match:</b> Strict word boundary filter triggers.\n• <b>Big Emoji Reaction:</b> Pop-up animations on triggers.\n• <b>Auto-Edit:</b> Filter replies edit after 24 hours."
         )
         back_kb = InlineKeyboardMarkup([[InlineKeyboardButton('🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
         try: await call.message.edit_caption(caption=help_text, reply_markup=back_kb)
@@ -435,14 +397,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
     elif call.data == "about_menu":
         me = await client.get_me()
         about_text = (
-            f"🤖 <b>ᴀʙᴏᴜᴛ {me.first_name.upper()}</b>
-
-<b>• ᴅᴇᴠᴇʟᴏᴘᴇʀ:</b> Admin
-<b>• ʟᴀɴɢᴜᴀɢᴇ:</b> Python 3
-<b>• ꜰʀᴀᴍᴇᴡᴏʀᴋ:</b> Pyrogram
-<b>• ᴅᴀᴛᴀʙᴀꜱᴇ:</b> MongoDB
-
-<i>This bot provides powerful auto-request approval, dynamic EXACT keyword filtering with overwrite protection, and 24-hour auto-edit features for Telegram Groups & Channels.</i>"
+            f"🤖 <b>ᴀʙᴏᴜᴛ {me.first_name.upper()}</b>\n\n<b>• ᴅᴇᴠᴇʟᴏᴘᴇʀ:</b> Admin\n<b>• ʟᴀɴɢᴜᴀɢᴇ:</b> Python 3\n<b>• ꜰʀᴀᴍᴇᴡᴏʀᴋ:</b> Pyrogram\n<b>• ᴅᴀᴛᴀʙᴀꜱᴇ:</b> MongoDB\n\n<i>This bot provides powerful auto-request approval, dynamic EXACT keyword filtering with overwrite protection, and 24-hour auto-edit features for Telegram Groups & Channels.</i>"
         )
         back_kb = InlineKeyboardMarkup([[InlineKeyboardButton('🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
         try: await call.message.edit_caption(caption=about_text, reply_markup=back_kb)
@@ -453,11 +408,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
         await call.answer("🎟️ Upgrade feature coming soon!", show_alert=True)
     elif call.data == "start_menu":
         me = await client.get_me()
-        caption = f"🚩 <b>JAI SHRI RAM</b> 🚩
-
-<b>HEY {call.from_user.first_name.upper()}</b>, <b>{get_greeting()}</b>
-
-🤖 <b>ɪ ᴀᴍ {me.first_name.upper()}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
+        caption = f"🚩 <b>JAI SHRI RAM</b> 🚩\n\n<b>HEY {call.from_user.first_name.upper()}</b>, <b>{get_greeting()}</b>\n\n🤖 <b>ɪ ᴀᴍ {me.first_name.upper()}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton('🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
             [InlineKeyboardButton('ʜᴇʟᴘ 📢', callback_data='help_menu'), InlineKeyboardButton('ᴀʙᴏᴜᴛ 📖', callback_data='about_menu')],
@@ -485,19 +436,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
 
 @bot.on_message(filters.command("help") & filters.private)
 async def cmd_help(client: Client, msg: Message):
-    await msg.reply_text("📖 <b>Full Command Guide:</b>
-
-📢 <b>1. Channel DMs:</b>
-• <code>/setwelcome</code> & <code>/setleft</code>
-• <code>/offwelcome</code> & <code>/offleft</code>
-
-🗃️ <b>2. Group Filters:</b>
-• <code>/addfilter [word] | [reply]</code>
-• <code>/delfilter [word]</code>
-• <code>/filters</code>
-
-⏱️ <b>3. Custom Timer:</b>
-• <code>/settime <seconds></code>")
+    await msg.reply_text("📖 <b>Full Command Guide:</b>\n\n📢 <b>1. Channel DMs:</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n🗃️ <b>2. Group Filters:</b>\n• <code>/addfilter [word] | [reply]</code>\n• <code>/delfilter [word]</code>\n• <code>/filters</code>\n\n⏱️ <b>3. Custom Timer:</b>\n• <code>/settime <seconds></code>")
 
 # ==========================================
 # 4. GROUP FILTERS MANAGEMENT
@@ -507,10 +446,7 @@ async def cmd_addfilter(client: Client, msg: Message):
     if not await is_admin(client, msg): return
     
     if "|" not in msg.text:
-        return await msg.reply_text("❌ <b>Sahi Format:</b> <code>/addfilter keyword | reply link</code>
-
-<b>Example:</b>
-<code>/addfilter my demon k drama | https://t.me/ASKORENDRAMA/123</code>")
+        return await msg.reply_text("❌ <b>Sahi Format:</b> <code>/addfilter keyword | reply link</code>\n\n<b>Example:</b>\n<code>/addfilter my demon k drama | https://t.me/ASKORENDRAMA/123</code>")
     
     text = msg.text.replace("/addfilter", "", 1).strip()
     keyword, reply_text = text.split("|", 1)
@@ -547,10 +483,8 @@ async def cmd_filters(client: Client, msg: Message):
     if not await is_admin(client, msg): return
     chat_data = await get_chat_data(str(msg.chat.id))
     if chat_data.get('filters'):
-        active_filters = "
-".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
-        await msg.reply_text(f"📋 <b>Active Filters:</b>
-{active_filters}")
+        active_filters = "\n".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
+        await msg.reply_text(f"📋 <b>Active Filters:</b>\n{active_filters}")
     else: await msg.reply_text("No active filters.")
 
 # ==========================================
