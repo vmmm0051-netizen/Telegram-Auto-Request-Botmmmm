@@ -24,15 +24,15 @@ API_HASH = os.getenv('API_HASH', '')
 PORT = int(os.environ.get("PORT", 10000))
 
 # ⚠️ LINKS AUR BOT USERNAME
-FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       
-UPDATE_CHANNEL_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"   
+FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
+UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
 BOT_USERNAME = "KDL143bot" 
 
 # ⚠️ FORCE SUB CHANNELS (Yahan apne channels daalein)
-FSUB_CHANNEL_1 = -1002800172814  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
-FSUB_CHANNEL_2 = -1003684601193  # Dusre Channel ki ID yahan daalein
-FSUB_LINK_1 = "https://t.me/+HIq_6zg3fRE2MDE1"   # Pehle Channel ka invite link
-FSUB_LINK_2 = "https://t.me/K_CDRAMAUPDATES"   # Dusre Channel ka invite link                             
+FSUB_CHANNEL_1 = -1000000000000  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
+FSUB_CHANNEL_2 = -1000000000000  # Dusre Channel ki ID yahan daalein
+FSUB_LINK_1 = "https://t.me/AapkaPehlaChannel"   # Pehle Channel ka invite link
+FSUB_LINK_2 = "https://t.me/AapkaDusraChannel"   # Dusre Channel ka invite link                             
 
 # Initialize Client
 bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
@@ -41,6 +41,7 @@ bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_toke
 client = AsyncIOMotorClient(MONGO_URI)
 db = client.bot_database
 settings_col = db.chat_settings
+autofilter_col = db.autofilter_data  # Auto-Index Search Data Collection
 
 # --- BATCH SYSTEM HELPERS ---
 LINK_REGEX = re.compile(r'https://t\.me/(?:c/)?(.*)/(\d+)')
@@ -103,13 +104,11 @@ async def get_missing_channels(client, user_id):
             logging.error(f"⚠️ FSUB Cache/API Error for {ch['id']}: {e}")
             pass
     return missing
-    
+
 # --- FSUB TRY AGAIN BUTTON HANDLER ---
 @bot.on_callback_query(filters.regex(r"^fsub_(.*)"))
 async def fsub_callback(client: Client, call: CallbackQuery):
     token = call.matches[0].group(1)
-    
-    # Naye function se check karwaya
     missing_channels = await get_missing_channels(client, call.from_user.id)
     if missing_channels:
         return await call.answer("❌ Please join all required channels first!", show_alert=True)
@@ -136,7 +135,12 @@ async def cmd_cancel(client: Client, msg: Message):
 async def cmd_set_time(client: Client, msg: Message):
     args = msg.text.split()
     if len(args) < 2:
-        return await msg.reply_text("❌ <b>Format:</b> <code>/settime <seconds></code>\n\n<b>Example:</b>\n• <code>/settime 60</code> (1 Minute)\n• <code>/settime 600</code> (10 Minutes)\n• <code>/settime 3600</code> (1 Hour)")
+        return await msg.reply_text("❌ <b>Format:</b> <code>/settime <seconds></code>
+
+<b>Example:</b>
+• <code>/settime 60</code> (1 Minute)
+• <code>/settime 600</code> (10 Minutes)
+• <code>/settime 3600</code> (1 Hour)")
     
     try:
         seconds = int(args[1])
@@ -153,7 +157,8 @@ async def cmd_set_time(client: Client, msg: Message):
         if seconds >= 60:
             time_text = f"{seconds // 60} minutes"
             
-        await msg.reply_text(f"✅ <b>Batch Delete Time successfully update ho gaya hai!</b>\nAb se /batch link ki saari files <b>{time_text}</b> ke baad automatically delete ho jayengi.")
+        await msg.reply_text(f"✅ <b>Batch Delete Time successfully update ho gaya hai!</b>
+Ab se /batch link ki saari files <b>{time_text}</b> ke baad automatically delete ho jayengi.")
     except ValueError:
         await msg.reply_text("❌ Kripya ek valid number daalein (sirf digits/numbers)!")
 
@@ -188,12 +193,16 @@ async def private_state_manager(client: Client, msg: Message):
             return user_states.pop(user_id, None)
 
         state_data.update({"state": "waiting_for_text", "channel_id": channel_id, "channel_title": channel_title})
-        await msg.reply_text(f"✅ Channel verified: <b>{channel_title}</b>\n\n📝 Now, type and send your new custom Message.")
+        await msg.reply_text(f"✅ Channel verified: <b>{channel_title}</b>
+
+📝 Now, type and send your new custom Message.")
 
     elif state == "waiting_for_text":
         if not msg.text: return await msg.reply_text("❌ Please send text only.")
         await update_chat_data(state_data['channel_id'], {state_data['msg_type']: msg.text})
-        await msg.reply_text(f"✅ Message successfully set:\n\n{msg.text}")
+        await msg.reply_text(f"✅ Message successfully set:
+
+{msg.text}")
         user_states.pop(user_id, None)
 
     elif state == "waiting_for_first":
@@ -230,7 +239,9 @@ async def private_state_manager(client: Client, msg: Message):
 
         token = encode_id(chat_id, first_id, last_id)
         batch_link = f"https://t.me/{BOT_USERNAME}?start=batch_{token}"
-        await msg.reply_text(f"✅ <b>Here is your Batch Link:</b>\n\n<code>{batch_link}</code>")
+        await msg.reply_text(f"✅ <b>Here is your Batch Link:</b>
+
+<code>{batch_link}</code>")
         user_states.pop(user_id, None)
 
 # --- CHANNEL DM SETUP MANAGEMENT ---
@@ -253,23 +264,22 @@ async def cmd_start(client: Client, msg: Message):
     if len(msg.command) > 1 and msg.command[1].startswith("batch_"):
         token = msg.command[1].replace("batch_", "")
         
-                # 👇 NAYA VIP DYNAMIC FSUB CHECK 👇
+        # 👇 NAYA VIP DYNAMIC FSUB CHECK 👇
         missing_channels = await get_missing_channels(client, msg.from_user.id)
         if missing_channels:
             user_link = f"<a href='tg://user?id={msg.from_user.id}'>{msg.from_user.first_name}</a>"
-            fsub_text = f"<i>Hey {user_link}\n\nPlease Join My Update Channel(s) To Use Me!</i>"
+            fsub_text = f"<i>Hey {user_link}
+
+Please Join My Update Channel(s) To Use Me!</i>"
             
             fsub_buttons = []
-            # Jo channel missing hai, sirf usi ka button banega
             for ch in missing_channels:
                 fsub_buttons.append([InlineKeyboardButton(f"Join {ch['name']}", url=ch["link"])])
             
-            # Last mein Try Again ka button jod diya
             fsub_buttons.append([InlineKeyboardButton("♻️ Try Again", callback_data=f"fsub_{token}")])
-            
             return await msg.reply_text(fsub_text, reply_markup=InlineKeyboardMarkup(fsub_buttons))
         # 👆 DYNAMIC FSUB CHECK KHATAM 👆
-        
+
         data = decode_id(token)
         
         if data and len(data) == 3:
@@ -302,7 +312,9 @@ async def cmd_start(client: Client, msg: Message):
                             file_name = tg_msg.audio.file_name
                         
                         vip_caption = (
-                            f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>\n\n"
+                            f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>
+
+"
                             f"<b>⚜️ Powered By : @ASKORENDRAMA</b>"
                         )
                         
@@ -336,7 +348,9 @@ async def cmd_start(client: Client, msg: Message):
                     time_text = f"{delete_delay // 60} minutes"
                 
                 alert_text = (
-                    "⚠️ <u><b>Important:</b></u>\n\n"
+                    "⚠️ <u><b>Important:</b></u>
+
+"
                     f"<i>All Messages will be deleted after <b>{time_text}</b>. Please save or forward these "
                     "messages to your <b>personal saved messages</b> to avoid losing them!</i>"
                 )
@@ -371,8 +385,12 @@ async def cmd_start(client: Client, msg: Message):
     bot_name = me.first_name.upper() if me.first_name else "BOT"
     
     caption = (
-        f"🚩 <b>JAI SHRI RAM</b> 🚩\n\n"
-        f"<b>HEY {user_name}</b>, <b>{greeting}</b>\n\n"
+        f"🚩 <b>JAI SHRI RAM</b> 🚩
+
+"
+        f"<b>HEY {user_name}</b>, <b>{greeting}</b>
+
+"
         f"🤖 <b>ɪ ᴀᴍ {bot_name}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
     )
     kb = InlineKeyboardMarkup([
@@ -390,10 +408,26 @@ async def cmd_start(client: Client, msg: Message):
 async def cb_handlers(client: Client, call: CallbackQuery):
     if call.data == "help_menu":
         help_text = (
-            "📖 <b>Full Command & Feature Guide:</b>\n\n"
-            "📢 <b>1. Channel DMs (Welcome/Goodbye):</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n"
-            "🗃️ <b>2. Group Filters Management:</b>\n• <code>/addfilter [keyword] | [reply link]</code>\n• <code>/delfilter [keyword]</code>\n• <code>/delallfilters</code>\n• <code>/filters</code>\n\n"
-            "⚡ <b>3. Premium Features (Auto-Active):</b>\n• <b>Auto-Approve:</b> Channel requests approved instantly.\n• <b>Exact Match:</b> Strict word boundary filter triggers.\n• <b>Big Emoji Reaction:</b> Pop-up animations on triggers.\n• <b>Auto-Edit:</b> Filter replies edit after 24 hours."
+            "📖 <b>Full Command & Feature Guide:</b>
+
+"
+            "📢 <b>1. Channel DMs (Welcome/Goodbye):</b>
+• <code>/setwelcome</code> & <code>/setleft</code>
+• <code>/offwelcome</code> & <code>/offleft</code>
+
+"
+            "🗃️ <b>2. Group Filters Management:</b>
+• <code>/addfilter [keyword] | [reply link]</code>
+• <code>/delfilter [keyword]</code>
+• <code>/delallfilters</code>
+• <code>/filters</code>
+
+"
+            "⚡ <b>3. Premium Features (Auto-Active):</b>
+• <b>Auto-Approve:</b> Channel requests approved instantly.
+• <b>Exact Match:</b> Strict word boundary filter triggers.
+• <b>Big Emoji Reaction:</b> Pop-up animations on triggers.
+• <b>Auto-Edit:</b> Filter replies edit after 24 hours."
         )
         back_kb = InlineKeyboardMarkup([[InlineKeyboardButton('🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
         try: await call.message.edit_caption(caption=help_text, reply_markup=back_kb)
@@ -401,7 +435,14 @@ async def cb_handlers(client: Client, call: CallbackQuery):
     elif call.data == "about_menu":
         me = await client.get_me()
         about_text = (
-            f"🤖 <b>ᴀʙᴏᴜᴛ {me.first_name.upper()}</b>\n\n<b>• ᴅᴇᴠᴇʟᴏᴘᴇʀ:</b> Admin\n<b>• ʟᴀɴɢᴜᴀɢᴇ:</b> Python 3\n<b>• ꜰʀᴀᴍᴇᴡᴏʀᴋ:</b> Pyrogram\n<b>• ᴅᴀᴛᴀʙᴀꜱᴇ:</b> MongoDB\n\n<i>This bot provides powerful auto-request approval, dynamic EXACT keyword filtering with overwrite protection, and 24-hour auto-edit features for Telegram Groups & Channels.</i>"
+            f"🤖 <b>ᴀʙᴏᴜᴛ {me.first_name.upper()}</b>
+
+<b>• ᴅᴇᴠᴇʟᴏᴘᴇʀ:</b> Admin
+<b>• ʟᴀɴɢᴜᴀɢᴇ:</b> Python 3
+<b>• ꜰʀᴀᴍᴇᴡᴏʀᴋ:</b> Pyrogram
+<b>• ᴅᴀᴛᴀʙᴀꜱᴇ:</b> MongoDB
+
+<i>This bot provides powerful auto-request approval, dynamic EXACT keyword filtering with overwrite protection, and 24-hour auto-edit features for Telegram Groups & Channels.</i>"
         )
         back_kb = InlineKeyboardMarkup([[InlineKeyboardButton('🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
         try: await call.message.edit_caption(caption=about_text, reply_markup=back_kb)
@@ -412,11 +453,15 @@ async def cb_handlers(client: Client, call: CallbackQuery):
         await call.answer("🎟️ Upgrade feature coming soon!", show_alert=True)
     elif call.data == "start_menu":
         me = await client.get_me()
-        caption = f"🚩 <b>JAI SHRI RAM</b> 🚩\n\n<b>HEY {call.from_user.first_name.upper()}</b>, <b>{get_greeting()}</b>\n\n🤖 <b>ɪ ᴀᴍ {me.first_name.upper()}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
+        caption = f"🚩 <b>JAI SHRI RAM</b> 🚩
+
+<b>HEY {call.from_user.first_name.upper()}</b>, <b>{get_greeting()}</b>
+
+🤖 <b>ɪ ᴀᴍ {me.first_name.upper()}, ᴛʜᴇ ᴍᴏꜱᴛ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ ᴡɪᴛʜ ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇꜱ.</b>"
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton('🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
             [InlineKeyboardButton('ʜᴇʟᴘ 📢', callback_data='help_menu'), InlineKeyboardButton('ᴀʙᴏᴜᴛ 📖', callback_data='about_menu')],
-            [InlineKeyboardButton('ᴛᴏᴘ ꜱᴇᴀʀｃʜɪɴɢ ⭐', callback_data='top_search'), InlineKeyboardButton('... 🎟️', callback_data='upgrade_menu')],
+            [InlineKeyboardButton('ᴛᴏᴘ ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'), InlineKeyboardButton('ᴜᴘɢʀᴀᴅᴇ 🎟️', callback_data='upgrade_menu')],
             [InlineKeyboardButton('➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ ➕', url=f'https://t.me/{me.username}?startchannel=start')]
         ])
         try: await call.message.edit_caption(caption=caption, reply_markup=kb)
@@ -440,7 +485,19 @@ async def cb_handlers(client: Client, call: CallbackQuery):
 
 @bot.on_message(filters.command("help") & filters.private)
 async def cmd_help(client: Client, msg: Message):
-    await msg.reply_text("📖 <b>Full Command Guide:</b>\n\n📢 <b>1. Channel DMs:</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n🗃️ <b>2. Group Filters:</b>\n• <code>/addfilter [word] | [reply]</code>\n• <code>/delfilter [word]</code>\n• <code>/filters</code>\n\n⏱️ <b>3. Custom Timer:</b>\n• <code>/settime <seconds></code>")
+    await msg.reply_text("📖 <b>Full Command Guide:</b>
+
+📢 <b>1. Channel DMs:</b>
+• <code>/setwelcome</code> & <code>/setleft</code>
+• <code>/offwelcome</code> & <code>/offleft</code>
+
+🗃️ <b>2. Group Filters:</b>
+• <code>/addfilter [word] | [reply]</code>
+• <code>/delfilter [word]</code>
+• <code>/filters</code>
+
+⏱️ <b>3. Custom Timer:</b>
+• <code>/settime <seconds></code>")
 
 # ==========================================
 # 4. GROUP FILTERS MANAGEMENT
@@ -450,7 +507,10 @@ async def cmd_addfilter(client: Client, msg: Message):
     if not await is_admin(client, msg): return
     
     if "|" not in msg.text:
-        return await msg.reply_text("❌ <b>Sahi Format:</b> <code>/addfilter keyword | reply link</code>\n\n<b>Example:</b>\n<code>/addfilter my demon k drama | https://t.me/ASKORENDRAMA/123</code>")
+        return await msg.reply_text("❌ <b>Sahi Format:</b> <code>/addfilter keyword | reply link</code>
+
+<b>Example:</b>
+<code>/addfilter my demon k drama | https://t.me/ASKORENDRAMA/123</code>")
     
     text = msg.text.replace("/addfilter", "", 1).strip()
     keyword, reply_text = text.split("|", 1)
@@ -487,8 +547,10 @@ async def cmd_filters(client: Client, msg: Message):
     if not await is_admin(client, msg): return
     chat_data = await get_chat_data(str(msg.chat.id))
     if chat_data.get('filters'):
-        active_filters = "\n".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
-        await msg.reply_text(f"📋 <b>Active Filters:</b>\n{active_filters}")
+        active_filters = "
+".join([f"• <code>{k}</code>" for k in chat_data['filters'].keys()])
+        await msg.reply_text(f"📋 <b>Active Filters:</b>
+{active_filters}")
     else: await msg.reply_text("No active filters.")
 
 # ==========================================
@@ -520,6 +582,34 @@ async def on_chat_member_update(client: Client, update: ChatMemberUpdated):
             try: await client.send_message(chat_id=user.id, text=final_msg)
             except: pass
 
+# ==========================================
+# 6. CHANNEL AUTO-INDEXER (SMART POST CATCHER)
+# ==========================================
+@bot.on_message(filters.channel & (filters.document | filters.video | filters.photo | filters.text))
+async def auto_index_channel_posts(client: Client, msg: Message):
+    text = msg.text or msg.caption
+    if not text: return
+    
+    chat_id = msg.chat.id
+    msg_id = msg.id
+    
+    first_line = text.split('\n')[0]
+    clean_title = re.sub(r'[^\w\s]', ' ', first_line).lower().strip()
+    clean_title = re.sub(r'\s+', ' ', clean_title)
+    
+    if not clean_title: return
+        
+    if msg.chat.username:
+        link = f"https://t.me/{msg.chat.username}/{msg_id}"
+    else:
+        link = f"https://t.me/c/{str(chat_id).replace('-100', '')}/{msg_id}"
+        
+    await autofilter_col.update_one(
+        {"chat_id": chat_id, "msg_id": msg_id},
+        {"$set": {"title": clean_title, "raw_text": first_line, "link": link}},
+        upsert=True
+    )
+
 # --- DIRECT REACTION BYPASS FUNCTION ---
 async def send_reaction_direct(chat_id, message_id, emoji):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
@@ -534,25 +624,42 @@ async def send_reaction_direct(chat_id, message_id, emoji):
     except:
         pass
 
-# --- GROUP CHAT LISTENER (FILTERS + REACTION BYPASS) ---
+# --- GROUP CHAT LISTENER (MANUAL + AUTO-INDEX SEARCH) ---
 @bot.on_message(filters.group & filters.text & ~filters.command([]))
 async def group_filter_handler(client: Client, msg: Message):
     if msg.text.startswith('/'): return
     chat_id = str(msg.chat.id)
     chat_data = await get_chat_data(chat_id)
+    user_query = msg.text.lower().strip()
     
+    # 1. PEHLE MANUAL FILTERS CHECK KAREGA
     for kw, reply in chat_data.get('filters', {}).items():
         pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-        if re.search(pattern, msg.text.lower()):
-            
+        if re.search(pattern, user_query):
             emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
             await send_reaction_direct(msg.chat.id, msg.id, random.choice(emoji_list))
             
             sent = await msg.reply_text(f"<b>{reply}</b>", disable_web_page_preview=True)
-            
             new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
             return 
+
+    # 2. AGAR MANUAL MEIN NAHI MILA, TOH AUTO-CHANNEL DATABASE MEIN DHUNDHEGA
+    if len(user_query) > 2:
+        search_pattern = r'\b' + re.escape(user_query) + r'\b'
+        results = await autofilter_col.find({"title": {"$regex": search_pattern, "$options": "i"}}).to_list(length=1)
+        
+        if results:
+            res = results[0]
+            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
+            await send_reaction_direct(msg.chat.id, msg.id, random.choice(emoji_list))
+            
+            reply_text = f"🎬 <b>{res['raw_text']}</b>\n\n👉 <a href='{res['link']}'>𝗖𝗟𝗜𝗖𝗞 𝗛𝗘𝗥𝗘 𝗧𝗢 𝗚𝗘𝗧 𝗟𝗜𝗡𝗞𝗦</a>"
+            sent = await msg.reply_text(reply_text, disable_web_page_preview=True)
+            
+            new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
+            await update_chat_data(chat_id, {"cleanup": new_cleanup})
+            return
 
 # --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
 async def cleanup_task():
