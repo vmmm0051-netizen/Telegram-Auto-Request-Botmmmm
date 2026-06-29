@@ -24,15 +24,15 @@ API_HASH = os.getenv('API_HASH', '')
 PORT = int(os.environ.get("PORT", 10000))
 
 # ⚠️ LINKS AUR BOT USERNAME
-FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
-UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
+FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       
+UPDATE_CHANNEL_LINK = "https://t.me/K_CDRAMAUPDATES"   
 BOT_USERNAME = "KDL143bot" 
 
 # ⚠️ FORCE SUB CHANNELS (Yahan apne channels daalein)
-FSUB_CHANNEL_1 = -1000000000000  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
-FSUB_CHANNEL_2 = -1000000000000  # Dusre Channel ki ID yahan daalein
-FSUB_LINK_1 = "https://t.me/AapkaPehlaChannel"   # Pehle Channel ka invite link
-FSUB_LINK_2 = "https://t.me/AapkaDusraChannel"   # Dusre Channel ka invite link                             
+FSUB_CHANNEL_1 = -1002800172814  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
+FSUB_CHANNEL_2 = -1003684601193  # Dusre Channel ki ID yahan daalein
+FSUB_LINK_1 = "https://t.me/+HIq_6zg3fRE2MDE1"   # Pehle Channel ka invite link
+FSUB_LINK_2 = "https://t.me/K_CDRAMAUPDATES"   # Dusre Channel ka invite link                             
 
 # Initialize Client
 bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
