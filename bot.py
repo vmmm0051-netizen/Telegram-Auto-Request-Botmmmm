@@ -22,10 +22,10 @@ API_ID = os.getenv('API_ID', '0')
 API_HASH = os.getenv('API_HASH', '')    
 PORT = int(os.environ.get("PORT", 10000))
 
-# ⚠️ YAHAN APNE ALAG-ALAG LINKS AUR BOT USERNAME DAALEIN
-FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       
-UPDATE_CHANNEL_LINK = "https://t.me/K_CDRAMAUPDATES"   
-BOT_USERNAME = "KDL143BOT"                              
+# ⚠️ LINKS AUR BOT USERNAME (Maine @ASKORENDRAMA add kar diya hai)
+FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
+UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
+BOT_USERNAME = "KDL143bot"                              
 
 # Initialize Client
 bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
@@ -269,14 +269,27 @@ async def cmd_start(client: Client, msg: Message):
             
             await wait_msg.delete()
 
-            # Add warning text and track it for dynamic auto-deletion
+            # 👇 NAYA VIP ALERT MESSAGE YE RAHAA
             if sent_ids:
                 time_text = f"{delete_delay} seconds"
                 if delete_delay >= 60:
                     time_text = f"{delete_delay // 60} minutes"
                 
-                alert = await msg.reply_text(f"⚠️ <b>Important Notice:</b> All files have been sent successfully. These files will be automatically deleted in the next <b>{time_text}</b>! Please forward or save them to another chat as soon as possible.")
+                alert_text = (
+                    "⚠️ <u><b>Important:</b></u>\n\n"
+                    f"<i>All Messages will be deleted after <b>{time_text}</b>. Please save or forward these "
+                    "messages to your <b>personal saved messages</b> to avoid losing them!</i>"
+                )
                 
+                alert_button = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📟 UPDATE CHANNEL", url=UPDATE_CHANNEL_LINK)]
+                ])
+                
+                alert = await msg.reply_text(
+                    text=alert_text,
+                    reply_markup=alert_button
+                )
+                sent_ids.append(alert.id)
                 
                 # Push items to the database cleanup queue
                 user_chat_id = str(msg.chat.id)
@@ -466,13 +479,12 @@ async def group_filter_handler(client: Client, msg: Message):
 # --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
 async def cleanup_task():
     while True:
-        await asyncio.sleep(15) # Dynamic updates ke liye checker fast kiya hai ⏱️
+        await asyncio.sleep(15) 
         async for chat in settings_col.find({"cleanup": {"$not": {"$size": 0}}}):
             valid = []
             for item in chat.get('cleanup', []):
                 if time.time() >= item['delete_at']:
                     try:
-                        # Check karega ki delete karna hai ya filter message edit karna hai
                         if item.get("action") == "delete":
                             await bot.delete_messages(
                                 chat_id=item['chat_id'], 
