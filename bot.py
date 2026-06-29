@@ -275,8 +275,8 @@ async def cmd_start(client: Client, msg: Message):
                 if delete_delay >= 60:
                     time_text = f"{delete_delay // 60} minutes"
                 
-                alert = await msg.reply_text(f"⚠️ <b>Important Notice:</b> Saari files successfully bhej di gayi hain. Ye saari files agle <b>{time_text}</b> mein automatically delete ho jayengi! Kripya inhe jald se jald kisi aur chat par forward/save kar lein.")
-                sent_ids.append(alert.id)
+                alert = await msg.reply_text(f"⚠️ <b>Important Notice:</b> All files have been sent successfully. These files will be automatically deleted in the next <b>{time_text}</b>! Please forward or save them to another chat as soon as possible.")
+                
                 
                 # Push items to the database cleanup queue
                 user_chat_id = str(msg.chat.id)
