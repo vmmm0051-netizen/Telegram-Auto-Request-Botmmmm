@@ -473,14 +473,22 @@ async def group_filter_handler(client: Client, msg: Message):
     for kw, reply in chat_data.get('filters', {}).items():
         pattern = r'\b' + re.escape(kw.lower()) + r'\b'
         if re.search(pattern, msg.text.lower()):
+            # 1. Pehle Reaction Dega (Naya Sahi Syntax)
             emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
-            try: await msg.react(random.choice(emoji_list))
-            except: pass
+            try: 
+                await client.send_reaction(chat_id=msg.chat.id, message_id=msg.id, emoji=random.choice(emoji_list))
+            except Exception as e: 
+                logging.error(f"Reaction Error: {e}")
+                pass
             
+            # 2. Phir Link Bhejega
             sent = await msg.reply_text(f"<b>{reply}</b>", disable_web_page_preview=True)
+            
+            # 3. 24 Ghante baad Auto-Edit ki list mein add karega
             new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
             return 
+            
 
 # --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
 async def cleanup_task():
