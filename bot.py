@@ -578,14 +578,41 @@ async def group_filter_handler(client: Client, msg: Message):
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
             return 
 
-        # 2. AGAR MANUAL MEIN NAHI MILA, TOH AUTO-CHANNEL DATABASE MEIN DHUNDHEGA
+            # 2. AGAR MANUAL MEIN NAHI MILA, TOH AUTO-CHANNEL DATABASE MEIN DHUNDHEGA
     if len(user_query) > 2:
-        # 👇 Brackets/symbols hatane wala FIX 👇
+        # Brackets/symbols hatane wala FIX
         clean_query = re.sub(r'[^\w\s]', ' ', user_query).lower().strip()
         clean_query = re.sub(r'\s+', ' ', clean_query)
         
+        # Step 1: Pehle EXACT Match try karega
         search_pattern = r'\b' + re.escape(clean_query) + r'\b'
         results = await autofilter_col.find({"title": {"$regex": search_pattern, "$options": "i"}}).to_list(length=1)
+        
+        # 👇 NAYA VIP SMART SEARCH FIX 👇
+        # Step 2: Agar EXACT match fail ho jaye (user ne extra word likhe hon), 
+        # toh peeche se 1-1 word kam karke dhoondhega (Jaise: "you are desire hind k drama" -> "you are desire")
+        if not results:
+            words = clean_query.split()
+            for i in range(len(words) - 1, 1, -1):
+                short_query = " ".join(words[:i])
+                short_pattern = r'\b' + re.escape(short_query) + r'\b'
+                results = await autofilter_col.find({"title": {"$regex": short_pattern, "$options": "i"}}).to_list(length=1)
+                if results:
+                    break # Movie milte hi search rok dega
+        # 👆 SMART SEARCH KHATAM 👆
+        
+        if results:
+            res = results[0]
+            emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
+            await send_reaction_direct(msg.chat.id, msg.id, random.choice(emoji_list))
+            
+            reply_text = f"🎬 <b>{res['raw_text']}</b>\n\n👉 <a href='{res['link']}'>𝗖𝗟𝗜𝗖𝗞 𝗛𝗘𝗥𝗘 𝗧𝗢 𝗚𝗘𝗧 𝗟𝗜𝗡𝗞𝗦</a>"
+            sent = await msg.reply_text(reply_text, disable_web_page_preview=True)
+            
+            new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
+            await update_chat_data(chat_id, {"cleanup": new_cleanup})
+            return
+            
         
         if results:
             res = results[0]
