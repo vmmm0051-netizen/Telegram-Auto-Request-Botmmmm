@@ -26,7 +26,7 @@ PORT = int(os.environ.get("PORT", 10000))
 # ⚠️ LINKS AUR BOT USERNAME
 FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
 UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
-BOT_USERNAME = "KDL143bot" 
+BOT_USERNAME = "Channelpsotsearchbot" 
 
 # ⚠️ FORCE SUB CHANNELS (Yahan apne channels daalein)
 FSUB_CHANNEL_1 = -1000000000000  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
