@@ -23,8 +23,8 @@ API_HASH = os.getenv('API_HASH', '')
 PORT = int(os.environ.get("PORT", 10000))
 
 # ⚠️ LINKS AUR BOT USERNAME (Maine @ASKORENDRAMA add kar diya hai)
-FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
-UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
+FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       
+UPDATE_CHANNEL_LINK = "https://t.me/K_CDRAMAUPDATES"   
 BOT_USERNAME = "KDL143bot"                              
 
 # Initialize Client
