@@ -578,9 +578,13 @@ async def group_filter_handler(client: Client, msg: Message):
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
             return 
 
-    # 2. AGAR MANUAL MEIN NAHI MILA, TOH AUTO-CHANNEL DATABASE MEIN DHUNDHEGA
+        # 2. AGAR MANUAL MEIN NAHI MILA, TOH AUTO-CHANNEL DATABASE MEIN DHUNDHEGA
     if len(user_query) > 2:
-        search_pattern = r'\b' + re.escape(user_query) + r'\b'
+        # 👇 Brackets/symbols hatane wala FIX 👇
+        clean_query = re.sub(r'[^\w\s]', ' ', user_query).lower().strip()
+        clean_query = re.sub(r'\s+', ' ', clean_query)
+        
+        search_pattern = r'\b' + re.escape(clean_query) + r'\b'
         results = await autofilter_col.find({"title": {"$regex": search_pattern, "$options": "i"}}).to_list(length=1)
         
         if results:
@@ -594,6 +598,21 @@ async def group_filter_handler(client: Client, msg: Message):
             new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
             return
+
+# --- X-RAY COMMAND (DATABASE CHECKER - ALL USERS) ---
+@bot.on_message(filters.command("listdb") & filters.group)
+async def cmd_listdb(client: Client, msg: Message):
+    wait_msg = await msg.reply_text("🔍 <i>Database check kar raha hu...</i>")
+    docs = await autofilter_col.find({}).sort("_id", -1).limit(10).to_list(length=10)
+    
+    if not docs:
+        return await wait_msg.edit_text("📭 <b>Database is Empty!</b>\nBot ne channel se koi post save NAHI ki hai.")
+        
+    text = "📁 <b>Bot Ke Dimaag Me Save Hue Last 10 Posts:</b>\n\n"
+    for d in docs:
+        text += f"• <code>{d.get('title')}</code>\n"
+    text += "\n<i>👉 Aapko exact yahi naam copy karke group me bhejna hoga tabhi bot link dega!</i>"
+    await wait_msg.edit_text(text)
 
 # --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
 async def cleanup_task():
