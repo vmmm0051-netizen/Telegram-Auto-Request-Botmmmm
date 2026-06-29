@@ -81,25 +81,32 @@ def get_greeting():
     elif hour < 20: return "ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌥️"
     else: return "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌙"
 
-# --- FSUB CHECKER HELPER ---
-async def check_fsub(client, user_id):
-    channels = [FSUB_CHANNEL_1, FSUB_CHANNEL_2]
+# --- SMART FSUB MISSING CHANNELS FINDER ---
+async def get_missing_channels(client, user_id):
+    missing = []
+    # Dono channels ka data ek list mein daal diya
+    channels = [
+        {"id": FSUB_CHANNEL_1, "link": FSUB_LINK_1, "name": "Channel 1"},
+        {"id": FSUB_CHANNEL_2, "link": FSUB_LINK_2, "name": "Channel 2"}
+    ]
     for ch in channels:
         try:
-            member = await client.get_chat_member(ch, user_id)
+            member = await client.get_chat_member(ch["id"], user_id)
             if member.status in [enums.ChatMemberStatus.BANNED, enums.ChatMemberStatus.LEFT]:
-                return False
+                missing.append(ch)
         except:
-            return False 
-    return True
+            missing.append(ch) # Agar error aaya ya user nahi mila, toh missing list mein daal do
+    return missing
 
 # --- FSUB TRY AGAIN BUTTON HANDLER ---
 @bot.on_callback_query(filters.regex(r"^fsub_(.*)"))
 async def fsub_callback(client: Client, call: CallbackQuery):
     token = call.matches[0].group(1)
-    is_joined = await check_fsub(client, call.from_user.id)
-    if not is_joined:
-        return await call.answer("❌ Please join both channels first!", show_alert=True)
+    
+    # Naye function se check karwaya
+    missing_channels = await get_missing_channels(client, call.from_user.id)
+    if missing_channels:
+        return await call.answer("❌ Please join all required channels first!", show_alert=True)
     
     await call.message.delete()
     call.message.from_user = call.from_user
@@ -240,18 +247,23 @@ async def cmd_start(client: Client, msg: Message):
     if len(msg.command) > 1 and msg.command[1].startswith("batch_"):
         token = msg.command[1].replace("batch_", "")
         
-        is_joined = await check_fsub(client, msg.from_user.id)
-        if not is_joined:
+                # 👇 NAYA VIP DYNAMIC FSUB CHECK 👇
+        missing_channels = await get_missing_channels(client, msg.from_user.id)
+        if missing_channels:
             user_link = f"<a href='tg://user?id={msg.from_user.id}'>{msg.from_user.first_name}</a>"
-            fsub_text = f"<i>Hey {user_link}\n\nPlease Join All My Update Channels To Use Me!</i>"
+            fsub_text = f"<i>Hey {user_link}\n\nPlease Join My Update Channel(s) To Use Me!</i>"
             
-            fsub_buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join Channel 1", url=FSUB_LINK_1)],
-                [InlineKeyboardButton("Join Channel 2", url=FSUB_LINK_2)],
-                [InlineKeyboardButton("♻️ Try Again", callback_data=f"fsub_{token}")]
-            ])
-            return await msg.reply_text(fsub_text, reply_markup=fsub_buttons)
-
+            fsub_buttons = []
+            # Jo channel missing hai, sirf usi ka button banega
+            for ch in missing_channels:
+                fsub_buttons.append([InlineKeyboardButton(f"Join {ch['name']}", url=ch["link"])])
+            
+            # Last mein Try Again ka button jod diya
+            fsub_buttons.append([InlineKeyboardButton("♻️ Try Again", callback_data=f"fsub_{token}")])
+            
+            return await msg.reply_text(fsub_text, reply_markup=InlineKeyboardMarkup(fsub_buttons))
+        # 👆 DYNAMIC FSUB CHECK KHATAM 👆
+        
         data = decode_id(token)
         
         if data and len(data) == 3:
