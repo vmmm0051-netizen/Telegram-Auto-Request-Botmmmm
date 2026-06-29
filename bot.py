@@ -25,7 +25,7 @@ PORT = int(os.environ.get("PORT", 10000))
 
 # ⚠️ LINKS AUR BOT USERNAME
 FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       
-UPDATE_CHANNEL_LINK = "https://t.me/K_CDRAMAUPDATES"   
+UPDATE_CHANNEL_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"   
 BOT_USERNAME = "KDL143bot" 
 
 # ⚠️ FORCE SUB CHANNELS (Yahan apne channels daalein)
