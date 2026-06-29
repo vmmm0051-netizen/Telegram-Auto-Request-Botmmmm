@@ -5,6 +5,7 @@ import time
 import random
 import re
 import base64
+import aiohttp
 from aiohttp import web
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -22,10 +23,16 @@ API_ID = os.getenv('API_ID', '0')
 API_HASH = os.getenv('API_HASH', '')    
 PORT = int(os.environ.get("PORT", 10000))
 
-# ⚠️ LINKS AUR BOT USERNAME (Maine @ASKORENDRAMA add kar diya hai)
-FILE_CAPTION_LINK = "https://t.me/+rG8nfdrvV2FlN2M1"       
-UPDATE_CHANNEL_LINK = "https://t.me/K_CDRAMAUPDATES"   
-BOT_USERNAME = "KDL143bot"                              
+# ⚠️ LINKS AUR BOT USERNAME
+FILE_CAPTION_LINK = "https://t.me/ASKORENDRAMA"       
+UPDATE_CHANNEL_LINK = "https://t.me/ASKORENDRAMA"   
+BOT_USERNAME = "KDL143bot" 
+
+# ⚠️ FORCE SUB CHANNELS (Yahan apne channels daalein)
+FSUB_CHANNEL_1 = -1000000000000  # Pehle Channel ki ID yahan daalein (Minus lagana zaroori hai)
+FSUB_CHANNEL_2 = -1000000000000  # Dusre Channel ki ID yahan daalein
+FSUB_LINK_1 = "https://t.me/AapkaPehlaChannel"   # Pehle Channel ka invite link
+FSUB_LINK_2 = "https://t.me/AapkaDusraChannel"   # Dusre Channel ka invite link                             
 
 # Initialize Client
 bot = Client("filter_batch_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, parse_mode=enums.ParseMode.HTML)
@@ -74,6 +81,31 @@ def get_greeting():
     elif hour < 20: return "ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌥️"
     else: return "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌙"
 
+# --- FSUB CHECKER HELPER ---
+async def check_fsub(client, user_id):
+    channels = [FSUB_CHANNEL_1, FSUB_CHANNEL_2]
+    for ch in channels:
+        try:
+            member = await client.get_chat_member(ch, user_id)
+            if member.status in [enums.ChatMemberStatus.BANNED, enums.ChatMemberStatus.LEFT]:
+                return False
+        except:
+            return False 
+    return True
+
+# --- FSUB TRY AGAIN BUTTON HANDLER ---
+@bot.on_callback_query(filters.regex(r"^fsub_(.*)"))
+async def fsub_callback(client: Client, call: CallbackQuery):
+    token = call.matches[0].group(1)
+    is_joined = await check_fsub(client, call.from_user.id)
+    if not is_joined:
+        return await call.answer("❌ Please join both channels first!", show_alert=True)
+    
+    await call.message.delete()
+    call.message.from_user = call.from_user
+    call.message.command = ["start", f"batch_{token}"]
+    await cmd_start(client, call.message)
+
 # ==========================================
 # 1. BATCH GENERATOR & CUSTOM TIME COMMANDS
 # ==========================================
@@ -98,7 +130,6 @@ async def cmd_set_time(client: Client, msg: Message):
         if seconds < 5:
             return await msg.reply_text("❌ Kripya kam se kam 5 seconds ka time set karein!")
         
-        # Save custom time globally in MongoDB
         await settings_col.update_one(
             {"chat_id": "GLOBAL_CONFIG"},
             {"$set": {"batch_delete_time": seconds}},
@@ -198,16 +229,29 @@ async def start_setting_msg(client: Client, msg: Message):
     user_states[msg.from_user.id] = {"state": "waiting_for_forward", "msg_type": msg_type, "action": action}
     await msg.reply_text("📢 Please <b>Forward</b> any message from your Channel here.")
 
+
 # ==========================================
-# 3. START COMMAND WITH CUSTOM TIMED FILE SENDER
+# 3. START COMMAND WITH FSUB & TIMED SENDER
 # ==========================================
 @bot.on_message(filters.command("start") & filters.private)
 async def cmd_start(client: Client, msg: Message):
     user_states.pop(msg.from_user.id, None)
     
-    # BATCH FILE SENDING PROCESS
     if len(msg.command) > 1 and msg.command[1].startswith("batch_"):
         token = msg.command[1].replace("batch_", "")
+        
+        is_joined = await check_fsub(client, msg.from_user.id)
+        if not is_joined:
+            user_link = f"<a href='tg://user?id={msg.from_user.id}'>{msg.from_user.first_name}</a>"
+            fsub_text = f"<i>Hey {user_link}\n\nPlease Join All My Update Channels To Use Me!</i>"
+            
+            fsub_buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join Channel 1", url=FSUB_LINK_1)],
+                [InlineKeyboardButton("Join Channel 2", url=FSUB_LINK_2)],
+                [InlineKeyboardButton("♻️ Try Again", callback_data=f"fsub_{token}")]
+            ])
+            return await msg.reply_text(fsub_text, reply_markup=fsub_buttons)
+
         data = decode_id(token)
         
         if data and len(data) == 3:
@@ -217,7 +261,6 @@ async def cmd_start(client: Client, msg: Message):
 
             wait_msg = await msg.reply_text("⏳ <i>Sending your files, please wait...</i>")
             
-            # Fetch custom delete time from DB (default 600 seconds/10 mins)
             global_config = await settings_col.find_one({"chat_id": "GLOBAL_CONFIG"})
             delete_delay = global_config.get("batch_delete_time", 600) if global_config else 600
             
@@ -269,7 +312,6 @@ async def cmd_start(client: Client, msg: Message):
             
             await wait_msg.delete()
 
-            # 👇 NAYA VIP ALERT MESSAGE YE RAHAA
             if sent_ids:
                 time_text = f"{delete_delay} seconds"
                 if delete_delay >= 60:
@@ -291,7 +333,6 @@ async def cmd_start(client: Client, msg: Message):
                 )
                 sent_ids.append(alert.id)
                 
-                # Push items to the database cleanup queue
                 user_chat_id = str(msg.chat.id)
                 user_data = await get_chat_data(user_chat_id)
                 cleanup_items = user_data.get('cleanup', [])
@@ -306,7 +347,6 @@ async def cmd_start(client: Client, msg: Message):
                 await update_chat_data(user_chat_id, {"cleanup": cleanup_items})
             return
             
-    # DEFAULT START RESPONSE
     me = await client.get_me()
     greeting = get_greeting()
     user_name = msg.from_user.first_name.upper() if msg.from_user.first_name else "USER"
@@ -328,13 +368,13 @@ async def cmd_start(client: Client, msg: Message):
     except: await msg.reply_text(caption, reply_markup=kb)
 
 # --- CALLBACK MENUS ---
-@bot.on_callback_query()
+@bot.on_callback_query(~filters.regex(r"^fsub_(.*)"))
 async def cb_handlers(client: Client, call: CallbackQuery):
     if call.data == "help_menu":
         help_text = (
             "📖 <b>Full Command & Feature Guide:</b>\n\n"
             "📢 <b>1. Channel DMs (Welcome/Goodbye):</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n"
-            "🗃️ <b>2. Group Filters Management:</b>\n• <code>/addfilter [keyword] [reply text]</code>\n• <code>/delfilter [keyword]</code>\n• <code>/delallfilters</code>\n• <code>/filters</code>\n\n"
+            "🗃️ <b>2. Group Filters Management:</b>\n• <code>/addfilter [keyword] | [reply link]</code>\n• <code>/delfilter [keyword]</code>\n• <code>/delallfilters</code>\n• <code>/filters</code>\n\n"
             "⚡ <b>3. Premium Features (Auto-Active):</b>\n• <b>Auto-Approve:</b> Channel requests approved instantly.\n• <b>Exact Match:</b> Strict word boundary filter triggers.\n• <b>Big Emoji Reaction:</b> Pop-up animations on triggers.\n• <b>Auto-Edit:</b> Filter replies edit after 24 hours."
         )
         back_kb = InlineKeyboardMarkup([[InlineKeyboardButton('🔙 ʙᴀᴄᴋ', callback_data='start_menu')]])
@@ -382,7 +422,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
 
 @bot.on_message(filters.command("help") & filters.private)
 async def cmd_help(client: Client, msg: Message):
-    await msg.reply_text("📖 <b>Full Command Guide:</b>\n\n📢 <b>1. Channel DMs:</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n🗃️ <b>2. Group Filters:</b>\n• <code>/addfilter [word] [reply]</code>\n• <code>/delfilter [word]</code>\n• <code>/filters</code>\n\n⏱️ <b>3. Custom Timer:</b>\n• <code>/settime <seconds></code>")
+    await msg.reply_text("📖 <b>Full Command Guide:</b>\n\n📢 <b>1. Channel DMs:</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n🗃️ <b>2. Group Filters:</b>\n• <code>/addfilter [word] | [reply]</code>\n• <code>/delfilter [word]</code>\n• <code>/filters</code>\n\n⏱️ <b>3. Custom Timer:</b>\n• <code>/settime <seconds></code>")
 
 # ==========================================
 # 4. GROUP FILTERS MANAGEMENT
@@ -391,7 +431,6 @@ async def cmd_help(client: Client, msg: Message):
 async def cmd_addfilter(client: Client, msg: Message):
     if not await is_admin(client, msg): return
     
-    # Naya system: Keyword aur Reply ko alag karne ke liye | (pipe) ka use
     if "|" not in msg.text:
         return await msg.reply_text("❌ <b>Sahi Format:</b> <code>/addfilter keyword | reply link</code>\n\n<b>Example:</b>\n<code>/addfilter my demon k drama | https://t.me/ASKORENDRAMA/123</code>")
     
@@ -463,8 +502,6 @@ async def on_chat_member_update(client: Client, update: ChatMemberUpdated):
             try: await client.send_message(chat_id=user.id, text=final_msg)
             except: pass
 
-import aiohttp
-
 # --- DIRECT REACTION BYPASS FUNCTION ---
 async def send_reaction_direct(chat_id, message_id, emoji):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
@@ -490,18 +527,14 @@ async def group_filter_handler(client: Client, msg: Message):
         pattern = r'\b' + re.escape(kw.lower()) + r'\b'
         if re.search(pattern, msg.text.lower()):
             
-            # 1. Direct Bypass Hack Se Reaction Bhejna
             emoji_list = ["🔥", "❤️", "👍", "🎉", "🍿", "💯", "🚀", "😍", "👏"]
             await send_reaction_direct(msg.chat.id, msg.id, random.choice(emoji_list))
             
-            # 2. Movie ka Link Bhejna
             sent = await msg.reply_text(f"<b>{reply}</b>", disable_web_page_preview=True)
             
-            # 3. 24 Ghante baad Auto-Edit ki list mein add karega
             new_cleanup = chat_data.get('cleanup', []) + [{"chat_id": sent.chat.id, "message_id": sent.id, "delete_at": time.time() + 86400}]
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
-            return
-            
+            return 
 
 # --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
 async def cleanup_task():
@@ -529,7 +562,7 @@ async def cleanup_task():
             await update_chat_data(chat['chat_id'], {"cleanup": valid})
 
 # --- RENDER WEB ALIVE SERVER ---
-async def handle_ping(request): return web.Response(text="Pyrogram Filter Bot Active!")
+async def handle_ping(request): return web.Response(text="Pyrogram VIP Bot Active!")
 async def start_dummy_server():
     app = web.Application()
     app.router.add_get('/', handle_ping)
