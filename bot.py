@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters, idle, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery, ChatJoinRequest, ChatMemberUpdated
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, UserNotParticipant, ChatAdminRequired
 
 # --- LOGGING & CONFIG ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -81,23 +81,29 @@ def get_greeting():
     elif hour < 20: return "ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌥️"
     else: return "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌙"
 
-# --- SMART FSUB MISSING CHANNELS FINDER ---
+# --- SMART FSUB MISSING CHANNELS FINDER (FIXED CACHE ISSUE) ---
 async def get_missing_channels(client, user_id):
     missing = []
-    # Dono channels ka data ek list mein daal diya
     channels = [
         {"id": FSUB_CHANNEL_1, "link": FSUB_LINK_1, "name": "Channel 1"},
         {"id": FSUB_CHANNEL_2, "link": FSUB_LINK_2, "name": "Channel 2"}
     ]
     for ch in channels:
         try:
-            member = await client.get_chat_member(ch["id"], user_id)
+            target_chat = int(ch["id"])
+            member = await client.get_chat_member(target_chat, user_id)
             if member.status in [enums.ChatMemberStatus.BANNED, enums.ChatMemberStatus.LEFT]:
                 missing.append(ch)
-        except:
-            missing.append(ch) # Agar error aaya ya user nahi mila, toh missing list mein daal do
+        except UserNotParticipant:
+            missing.append(ch)
+        except ChatAdminRequired:
+            logging.error(f"❌ BOT ADMIN NAHI HAI Channel {ch['id']} mein!")
+            missing.append(ch)
+        except Exception as e:
+            logging.error(f"⚠️ FSUB Cache/API Error for {ch['id']}: {e}")
+            pass
     return missing
-
+    
 # --- FSUB TRY AGAIN BUTTON HANDLER ---
 @bot.on_callback_query(filters.regex(r"^fsub_(.*)"))
 async def fsub_callback(client: Client, call: CallbackQuery):
