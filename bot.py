@@ -75,7 +75,7 @@ def get_greeting():
     else: return "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌙"
 
 # ==========================================
-# 1. BATCH GENERATOR COMMANDS
+# 1. BATCH GENERATOR & CUSTOM TIME COMMANDS
 # ==========================================
 @bot.on_message(filters.command("batch") & filters.private)
 async def cmd_batch(client: Client, msg: Message):
@@ -87,10 +87,36 @@ async def cmd_cancel(client: Client, msg: Message):
     user_states.pop(msg.from_user.id, None)
     await msg.reply_text("❌ Process cancelled.")
 
+@bot.on_message(filters.command("settime") & filters.private)
+async def cmd_set_time(client: Client, msg: Message):
+    args = msg.text.split()
+    if len(args) < 2:
+        return await msg.reply_text("❌ <b>Format:</b> <code>/settime <seconds></code>\n\n<b>Example:</b>\n• <code>/settime 60</code> (1 Minute)\n• <code>/settime 600</code> (10 Minutes)\n• <code>/settime 3600</code> (1 Hour)")
+    
+    try:
+        seconds = int(args[1])
+        if seconds < 5:
+            return await msg.reply_text("❌ Kripya kam se kam 5 seconds ka time set karein!")
+        
+        # Save custom time globally in MongoDB
+        await settings_col.update_one(
+            {"chat_id": "GLOBAL_CONFIG"},
+            {"$set": {"batch_delete_time": seconds}},
+            upsert=True
+        )
+        
+        time_text = f"{seconds} seconds"
+        if seconds >= 60:
+            time_text = f"{seconds // 60} minutes"
+            
+        await msg.reply_text(f"✅ <b>Batch Delete Time successfully update ho gaya hai!</b>\nAb se /batch link ki saari files <b>{time_text}</b> ke baad automatically delete ho jayengi.")
+    except ValueError:
+        await msg.reply_text("❌ Kripya ek valid number daalein (sirf digits/numbers)!")
+
 # ==========================================
 # 2. STATE MANAGER FOR PRIVATE CHAT
 # ==========================================
-@bot.on_message(filters.private & ~filters.command(["start", "batch", "help", "cancel", "setwelcome", "setleft", "offwelcome", "offleft"]))
+@bot.on_message(filters.private & ~filters.command(["start", "batch", "help", "cancel", "setwelcome", "setleft", "offwelcome", "offleft", "settime"]))
 async def private_state_manager(client: Client, msg: Message):
     user_id = msg.from_user.id
     state_data = user_states.get(user_id)
@@ -173,7 +199,7 @@ async def start_setting_msg(client: Client, msg: Message):
     await msg.reply_text("📢 Please <b>Forward</b> any message from your Channel here.")
 
 # ==========================================
-# 3. START COMMAND WITH VIP FILE SENDER
+# 3. START COMMAND WITH CUSTOM TIMED FILE SENDER
 # ==========================================
 @bot.on_message(filters.command("start") & filters.private)
 async def cmd_start(client: Client, msg: Message):
@@ -191,17 +217,20 @@ async def cmd_start(client: Client, msg: Message):
 
             wait_msg = await msg.reply_text("⏳ <i>Sending your files, please wait...</i>")
             
-            # 🔥 1 BUTTON SATH ALAG LINK 🔥
+            # Fetch custom delete time from DB (default 600 seconds/10 mins)
+            global_config = await settings_col.find_one({"chat_id": "GLOBAL_CONFIG"})
+            delete_delay = global_config.get("batch_delete_time", 600) if global_config else 600
+            
             vip_button = InlineKeyboardMarkup([
                 [InlineKeyboardButton("📌 JOIN UPDATE CHANNEL 📌", url=UPDATE_CHANNEL_LINK)]
             ])
             
+            sent_ids = []
             for m_id in range(first_id, last_id + 1):
                 try:
                     tg_msg = await client.get_messages(chat_id, m_id)
                     if tg_msg.empty: continue
                     
-                    # 👇 SIRF MOVIE/VIDEO/AUDIO PAR HI LINK LAGEGA
                     if tg_msg.document or tg_msg.video or tg_msg.audio:
                         file_name = "🎬 Movie/Series File"
                         if tg_msg.document and tg_msg.document.file_name: 
@@ -211,33 +240,58 @@ async def cmd_start(client: Client, msg: Message):
                         elif tg_msg.audio and tg_msg.audio.file_name: 
                             file_name = tg_msg.audio.file_name
                         
-                        # 🔥 VIP NEELA CAPTION 🔥
                         vip_caption = (
                             f"<b><a href='{FILE_CAPTION_LINK}'>{file_name}</a></b>\n\n"
                             f"<b>⚜️ Powered By : @ASKORENDRAMA</b>"
                         )
                         
-                        await client.copy_message(
+                        sent = await client.copy_message(
                             chat_id=msg.chat.id,
                             from_chat_id=chat_id,
                             message_id=m_id,
                             caption=vip_caption,
                             reply_markup=vip_button
                         )
+                        sent_ids.append(sent.id)
                     else:
-                        # 👇 STICKER/TEXT WAGERAH BINA LINK/BUTTON KE JAYEGA
-                        await client.copy_message(
+                        sent = await client.copy_message(
                             chat_id=msg.chat.id,
                             from_chat_id=chat_id,
                             message_id=m_id
                         )
+                        sent_ids.append(sent.id)
                     
                     await asyncio.sleep(0.5)
                 except FloodWait as e:
                     await asyncio.sleep(e.value)
                 except Exception:
                     pass
-            return await wait_msg.delete()
+            
+            await wait_msg.delete()
+
+            # Add warning text and track it for dynamic auto-deletion
+            if sent_ids:
+                time_text = f"{delete_delay} seconds"
+                if delete_delay >= 60:
+                    time_text = f"{delete_delay // 60} minutes"
+                
+                alert = await msg.reply_text(f"⚠️ <b>Important Notice:</b> Saari files successfully bhej di gayi hain. Ye saari files agle <b>{time_text}</b> mein automatically delete ho jayengi! Kripya inhe jald se jald kisi aur chat par forward/save kar lein.")
+                sent_ids.append(alert.id)
+                
+                # Push items to the database cleanup queue
+                user_chat_id = str(msg.chat.id)
+                user_data = await get_chat_data(user_chat_id)
+                cleanup_items = user_data.get('cleanup', [])
+                
+                for s_id in sent_ids:
+                    cleanup_items.append({
+                        "chat_id": msg.chat.id,
+                        "message_id": s_id,
+                        "delete_at": time.time() + delete_delay,
+                        "action": "delete"
+                    })
+                await update_chat_data(user_chat_id, {"cleanup": cleanup_items})
+            return
             
     # DEFAULT START RESPONSE
     me = await client.get_me()
@@ -291,7 +345,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton('🔰 ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ 🔰', url=f'https://t.me/{me.username}?startgroup=true')],
             [InlineKeyboardButton('ʜᴇʟᴘ 📢', callback_data='help_menu'), InlineKeyboardButton('ᴀʙᴏᴜᴛ 📖', callback_data='about_menu')],
-            [InlineKeyboardButton('ᴛᴏᴘ ꜱᴇᴀʀᴄʜɪɴɢ ⭐', callback_data='top_search'), InlineKeyboardButton('ᴜᴘɢʀᴀᴅᴇ 🎟️', callback_data='upgrade_menu')],
+            [InlineKeyboardButton('ᴛᴏᴘ ꜱᴇᴀʀｃʜɪɴɢ ⭐', callback_data='top_search'), InlineKeyboardButton('... 🎟️', callback_data='upgrade_menu')],
             [InlineKeyboardButton('➕ ᴀᴅᴅ ᴛᴏ ᴄʜᴀɴɴᴇʟ ➕', url=f'https://t.me/{me.username}?startchannel=start')]
         ])
         try: await call.message.edit_caption(caption=caption, reply_markup=kb)
@@ -315,7 +369,7 @@ async def cb_handlers(client: Client, call: CallbackQuery):
 
 @bot.on_message(filters.command("help") & filters.private)
 async def cmd_help(client: Client, msg: Message):
-    await msg.reply_text("📖 <b>Full Command Guide:</b>\n\n📢 <b>1. Channel DMs:</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n🗃️ <b>2. Group Filters:</b>\n• <code>/addfilter [word] [reply]</code>\n• <code>/delfilter [word]</code>\n• <code>/filters</code>")
+    await msg.reply_text("📖 <b>Full Command Guide:</b>\n\n📢 <b>1. Channel DMs:</b>\n• <code>/setwelcome</code> & <code>/setleft</code>\n• <code>/offwelcome</code> & <code>/offleft</code>\n\n🗃️ <b>2. Group Filters:</b>\n• <code>/addfilter [word] [reply]</code>\n• <code>/delfilter [word]</code>\n• <code>/filters</code>\n\n⏱️ <b>3. Custom Timer:</b>\n• <code>/settime <seconds></code>")
 
 # ==========================================
 # 4. GROUP FILTERS MANAGEMENT
@@ -409,22 +463,30 @@ async def group_filter_handler(client: Client, msg: Message):
             await update_chat_data(chat_id, {"cleanup": new_cleanup})
             return 
 
-# --- BACKGROUND AUTO-EDIT TASK ---
+# --- BACKGROUND DYNAMIC CLEANUP TASK (EDIT FILTERS / DELETE BATCHES) ---
 async def cleanup_task():
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(15) # Dynamic updates ke liye checker fast kiya hai ⏱️
         async for chat in settings_col.find({"cleanup": {"$not": {"$size": 0}}}):
             valid = []
             for item in chat.get('cleanup', []):
                 if time.time() >= item['delete_at']:
                     try:
-                        await bot.edit_message_text(
-                            chat_id=item['chat_id'], 
-                            message_id=item['message_id'],
-                            text="<b>💖 ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴛʜᴇ ᴛɪᴛʟᴇ, ᴀɴᴅ ɪ'ʟʟ ɢᴇᴛ ɪᴛ ꜰᴏʀ ʏᴏᴜ ɪɴꜱᴛᴀɴᴛʟʏ! 👇</b>"
-                        )
+                        # Check karega ki delete karna hai ya filter message edit karna hai
+                        if item.get("action") == "delete":
+                            await bot.delete_messages(
+                                chat_id=item['chat_id'], 
+                                message_ids=item['message_id']
+                            )
+                        else:
+                            await bot.edit_message_text(
+                                chat_id=item['chat_id'], 
+                                message_id=item['message_id'],
+                                text="<b>💖 ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴛʜᴇ ᴛɪᴛʟＥ, ᴀɴᴅ ɪ'ʟʟ ɢᴇᴛ ɪᴛ ꜰᴏʀ ʏᴏᴜ ɪɴꜱᴛᴀɴᴛʟʏ! 👇</b>"
+                            )
                     except: pass
-                else: valid.append(item)
+                else: 
+                    valid.append(item)
             await update_chat_data(chat['chat_id'], {"cleanup": valid})
 
 # --- RENDER WEB ALIVE SERVER ---
